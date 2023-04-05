@@ -1,0 +1,11 @@
+.idea*
+*.asc
+*.bin
+*.blif
+*.json
+*.log
+*.rpt
+*.vcd
+*.lx2
+/research/
+tb
