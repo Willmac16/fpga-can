@@ -4,6 +4,87 @@
 
 `timescale 10 ns / 1 ps
 
+module txp_tb;
+    reg next_bit, updated_sample, rx_updated_sample, stuff_bypass, rx;
+    wire tx, bit_advance, stuff_error, out_bit, doorbell;
+    reg sync_tick;
+
+    reg [23:0] txp_test_stream;
+    reg [23:0] txp_out_stream;
+
+    integer i;
+
+    tx_pipeline txp (.tx(tx), .updated_sample(updated_sample), .next_bit(next_bit), .bit_advance(bit_advance), .stuff_bypass(stuff_bypass));
+    rx_pipeline rxp (.rx(rx), .updated_sample(rx_updated_sample), .updated_bit(doorbell), .next_bit(out_bit), .stuff_error(stuff_error), .stuff_bypass(stuff_bypass));
+
+    initial begin
+        $dumpfile("can.lx2");
+        $dumpvars(0, txp_test_stream);
+        $dumpvars(0, txp_out_stream);
+        $dumpvars(0, txp);
+        $dumpvars(0, rxp);
+
+        // Init
+        stuff_bypass <= 1;
+        #1
+        stuff_bypass <= 0;
+        updated_sample <= 0;
+        rx_updated_sample <= 0;
+        #1;
+
+        // Stream without the need for stuff
+        txp_test_stream = 24'b100100100100100100100100;
+        i = 23;
+        while (i >= 0) begin
+            next_bit <= txp_test_stream[i];
+            updated_sample <= 1;
+            #1;
+            rx <= tx;
+            rx_updated_sample <= 1;
+            if (bit_advance) begin
+                i = i - 1;
+            end
+
+            #1
+            if (doorbell) begin
+                txp_out_stream <= {txp_out_stream[22:0], out_bit};
+            end
+            #1;
+            updated_sample <= 0;
+            rx_updated_sample <= 0;
+            #1;
+        end
+
+        stuff_bypass <= 1;
+        #1;
+        stuff_bypass <= 0;
+
+        // Stream with stuffing
+        txp_test_stream = 24'b100000000011111111100000;
+        i = 23;
+        #1;
+        while (i >= 0) begin
+            next_bit <= txp_test_stream[i];
+            updated_sample <= 1;
+            #1;
+            rx <= tx;
+            rx_updated_sample <= 1;
+            if (bit_advance) begin
+                i = i - 1;
+            end
+
+            #1
+            if (doorbell) begin
+                txp_out_stream <= {txp_out_stream[22:0], out_bit};
+            end
+            #1;
+            updated_sample <= 0;
+            rx_updated_sample <= 0;
+            #1;
+        end
+    end
+endmodule
+
 module rxp_tb;
     reg rx, updated_sample, stuff_bypass;
     wire updated_bit, next_bit, stuff_error;
@@ -89,9 +170,6 @@ module rxp_tb;
             end
             updated_sample <= 0;
         end
-
-
-
     end
 
 endmodule

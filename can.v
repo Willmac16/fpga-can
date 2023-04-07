@@ -95,7 +95,7 @@ module rx_pipeline(
     end
 
 
-    // bit [5] in queue/history gets returned, or latest bit
+    // bit [5] in history gets returned or latest bit
     always @(posedge updated_sample) begin
         if (stuff_bypass) begin
             next_bit <= rx;
@@ -121,7 +121,7 @@ module rx_pipeline(
                 end
             end else begin
                 // We don't know enough yet to unstuff
-                next_bit <= rx;
+                next_bit <= stuff_history[5];
                 updated_bit <= 1;
             end
         end
@@ -133,59 +133,57 @@ module rx_pipeline(
 endmodule
 
 module tx_pipeline(
-    input rx,
+    input next_bit,
     input updated_sample,
     input stuff_bypass,
-    output reg updated_bit,
-    output reg next_bit,
-    output reg stuff_error
+    output reg tx,
+    output reg bit_advance
 );
-    reg [5:0] stuff_history;
-    reg [5:0] history_valid;
+    reg [4:0] stuff_history;
+    reg [4:0] history_valid;
 
 
     always @(posedge stuff_bypass) begin
         stuff_history <= 0;
         history_valid <= 0;
-        stuff_error <= 0;
-        updated_bit <= 0;
+        bit_advance <= 0;
     end
 
 
-    // bit [5] in queue/history gets returned, or latest bit
+    // bit [4] in history gets returned or latest bit
+    // This fires when the next bit gets read by the ssm machine
+    // so the send machine is ready @ sync
     always @(posedge updated_sample) begin
         if (stuff_bypass) begin
-            next_bit <= rx;
-            updated_bit <= 1;
+            tx <= next_bit;
+            bit_advance <= 1;
         end else begin
-            // These Shifts need to be blocking so the later logic works
-            stuff_history = {rx, stuff_history[5:1]};
-            history_valid = {1'b1, history_valid[5:1]};
+            history_valid <= {1'b1, history_valid[4:1]};
 
-            if (history_valid == 6'b111111) begin
-                if (stuff_history == 6'b111111)
-                    stuff_error <= 1;
-                else if (stuff_history == 6'b000000)
-                    stuff_error <= 1;
-                else begin
-                    if (stuff_history[4:0] == 5'b11111 || stuff_history[4:0] == 5'b00000) begin
-                        // Next bit is stuffed: dont return anything
-                    end else begin
-                        // Next bit isn't stuffed: return the bit
-                        next_bit <= stuff_history[5];
-                        updated_bit <= 1;
-                    end
-                end
+            // Until we have five bits of history, the next bit is just returned
+            if (history_valid != 5'b11111) begin
+                stuff_history <= {next_bit, stuff_history[4:1]};
+                tx <= next_bit;
+                bit_advance <= 1;
             end else begin
-                // We don't know enough yet to unstuff
-                next_bit <= rx;
-                updated_bit <= 1;
+                // With full history, we need to deal with stuffing
+                // If all the bits are the same, we need to stuff the next bit and not ask for a new one
+                if ((stuff_history == 5'b00000) || (stuff_history == 5'b11111)) begin
+                    tx <= !stuff_history[4];
+                    stuff_history <= {!stuff_history[4], stuff_history[4:1]};
+                    bit_advance <= 0;
+                end else begin
+                    // Otherwise return the next bit and add it to history
+                    tx <= next_bit;
+                    stuff_history <= {next_bit, stuff_history[4:1]};
+                    bit_advance <= 1;
+                end
             end
         end
     end
 
     always @(negedge updated_sample) begin
-        updated_bit <= 0;
+        bit_advance <= 0;
     end
 endmodule
 
