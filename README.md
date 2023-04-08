@@ -15,10 +15,10 @@ A CAN 2.0B Controller for FPGAs written in Verilog
 * [x] Tx Pipeline (Bit Stuffer)
   * [x] Written
   * [x] Test Benched
-* [ ] CRC Machine (Shared between reciever and sender; updates one bit at a time)
+* [x] CRC Machine (Shared between reciever and sender; updates one bit at a time)
   * [x] Written
-  * [ ] Rewritten
-  * [ ] Test Benched
+  * [x] Rewritten
+  * [x] Test Benched
 * [ ] Send Machine (Gets told what to send and when to send it)
   * [ ] Written
   * [ ] Test Benched

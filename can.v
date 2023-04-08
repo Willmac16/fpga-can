@@ -410,25 +410,25 @@ endmodule
 //     end
 // endmodule
 
-// module crc_step_machine (
-//     input next_bit,
-//     input clear_crc,
-//     input update_crc,
-//     output [14:0] crc
-// );
-//     assign crc = crc_reg [14:0];
+module crc_step_machine (
+    input next_bit,
+    input clear_crc,
+    input update_crc,
+    output [14:0] crc
+);
+    assign crc = crc_reg [14:0];
 
-//     reg [15:0] crc_reg;
+    reg [15:0] crc_reg;
 
-//     always @(posedge clear_crc) begin
-//         crc_reg <= 0;
-//     end
+    always @(posedge clear_crc) begin
+        crc_reg <= 0;
+    end
 
-//     always @(posedge update_crc) begin
-//         crc_reg[15:1] = crc_reg[14:0];
-//         crc_reg[0] = 0;
+    always @(posedge update_crc) begin
+        // Shift Left
+        crc_reg = {crc_reg[14:0], 1'b0};
 
-//         if (next_bit ^ crc_reg[15])
-//             crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;
-//     end
-// endmodule
+        if (next_bit ^ crc_reg[15])
+            crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;
+    end
+endmodule

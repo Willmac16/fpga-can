@@ -4,6 +4,48 @@
 
 `timescale 10 ns / 1 ps
 
+module crc_tb;
+    reg next_bit, clear_crc, update_crc;
+    wire [14:0] crc;
+    reg [14:0] can_poly;
+    reg [14:0] xor_test;
+
+    reg [63:0] test_stream;
+
+    integer i;
+
+    crc_step_machine crcsm (.next_bit(next_bit), .clear_crc(clear_crc), .update_crc(update_crc), .crc(crc));
+    initial begin
+        $dumpfile("can.lx2");
+        $dumpvars(0, test_stream);
+        $dumpvars(0, crcsm);
+
+
+
+        // Init
+        clear_crc <= 1;
+        #1;
+        clear_crc <= 0;
+        #1;
+
+        // Test Stream
+        test_stream = 64'hd3359da81bd963e5;
+        for (i = 63; i >= 0; i = i - 1) begin
+            next_bit <= test_stream[i];
+            update_crc <= 1;
+            #1;
+            update_crc <= 0;
+            #1;
+        end
+
+        $display("Data: %h", test_stream);
+        $display("CRC: %h", crc);
+
+
+    end
+
+endmodule
+
 module txp_tb;
     reg next_bit, updated_sample, rx_updated_sample, stuff_bypass, rx;
     wire tx, bit_advance, stuff_error, out_bit, doorbell;
