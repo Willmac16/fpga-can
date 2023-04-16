@@ -19,15 +19,16 @@ A CAN 2.0B Controller for FPGAs written in Verilog
   * [x] Written
   * [x] Rewritten
   * [x] Test Benched
-* [ ] Send Machine (Gets told what to send and when to send it)
+* [  ] Send Machine (Gets told what to send and when to send it)
   * [ ] Written
   * [ ] Test Benched
-* [ ] Message Reciever (Takes in the rx pipeline and keeps track of the buses current state)
+* [x] Message Reciever (Takes in the rx pipeline and keeps track of the buses current state)
   * [x] Written
-  * [ ] Integrated with all the changes I made since I wrote it
-  * [ ] Test Benched
+  * [x] Integrated with all the changes I made since I wrote it
+  * [x] Test Benched
+  * [ ] Add all the error counting triggers
 * [ ] Message Sender (Takes in a msg id and up to 8 bytes and constructs & sends a CAN frame)
-  * [ ] Written
+  * [x] Written
   * [ ] Test Benched
   
 ### More Features I want to finish (to meet the whole spec)

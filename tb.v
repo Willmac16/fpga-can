@@ -4,12 +4,251 @@
 
 `timescale 10 ns / 1 ps
 
+module recieve_tb;
+    reg updated_sample, rx, stuff_error;
+
+    wire [63:0] msg;
+    wire [28:0] msg_id;
+    wire rtr, extended, bus_idle, FORM_ERROR, OVERLOAD_ERROR, fire_an_ack, msg_fresh;
+
+    reg next_bit, clear_crc, update_crc;
+
+    wire [14:0] crc;
+
+    message_reciever reciever (.updated_sample(updated_sample), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id), .rtr(rtr), .extended(extended), .msg(msg), .bus_idle(bus_idle), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR), .OVERLOAD_ERROR(OVERLOAD_ERROR), .fire_an_ack(fire_an_ack), .msg_fresh(msg_fresh));
+    crc_step_machine crcsm (.next_bit(next_bit), .clear_crc(clear_crc), .update_crc(update_crc), .crc(crc));
+
+    reg [163:0] test_stream;
+    integer i;
+
+    initial begin
+        $dumpfile("can.lx2");
+        $dumpvars(0, reciever);
+        $dumpvars(0, test_stream);
+        $dumpvars(0, crcsm);
+
+        // Init
+        stuff_error <= 0;
+        updated_sample <= 0;
+
+        // Valid MSG
+        test_stream[63] <= 1; // SOF
+        test_stream[62:52] <= 11'b01100110011; // ID
+        test_stream[51] <= 1; // RTR
+        test_stream[50:49] <= 2'b11; // Reserved
+        test_stream[48:45] <= 4'd0; // DLC
+
+        test_stream[44:30] <= 15'd0; // CRC
+        test_stream[29] <= 1'b0; // CRC Delim
+
+        test_stream[28] <= 1'b1; // ACK
+        test_stream[27] <= 1'b0; // ACK Delim
+
+        test_stream[26:20] <= 7'b0000000; // EOF
+        test_stream[19:0] <= 0;
+
+        clear_crc <= 1;
+        #1;
+
+        clear_crc <= 0;
+        #1;
+
+        for (i = 63; i >= 45; i = i - 1) begin
+            next_bit <= test_stream[i];
+            update_crc <= 1;
+            #0.01;
+            update_crc <= 0;
+            #0.01;
+        end
+
+        test_stream[44:30] <= crc;
+
+        #1;
+
+        for (i = 63; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // Valid Form, but invalid CRC
+        test_stream[44:30] <= crc ^ 15'b011000101010011;
+        #1;
+
+        for (i = 63; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // Msg with data
+        test_stream[163] <= 1; // SOF
+        test_stream[162:152] <= 11'b10001010101; // ID
+        test_stream[151] <= 1; // RTR
+        test_stream[150:149] <= 2'b11; // Reserved
+        test_stream[148:145] <= 4'b1000; // DLC
+        test_stream[144:81] <= 64'hd3359da81bd963e5; // Data
+
+        test_stream[80:66] <= 15'd0; // CRC
+        test_stream[65] <= 1'b0; // CRC Delim
+
+        test_stream[64] <= 1'b1; // ACK
+        test_stream[63] <= 1'b0; // ACK Delim
+
+        test_stream[62:55] <= 7'b0000000; // EOF
+        test_stream[54:0] <= 0;
+
+        clear_crc <= 1;
+        #1;
+
+        clear_crc <= 0;
+        #1;
+
+        for (i = 163; i >= 81; i = i - 1) begin
+            next_bit <= test_stream[i];
+            update_crc <= 1;
+            #0.01;
+            update_crc <= 0;
+            #0.01;
+        end
+
+        test_stream[80:66] <= crc;
+
+        #1;
+
+        for (i = 163; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // Msg with data
+        // Invalid CRC
+        test_stream[163] <= 1; // SOF
+        test_stream[162:152] <= 11'b10001010101; // ID
+        test_stream[151] <= 1; // RTR
+        test_stream[150:149] <= 2'b11; // Reserved
+        test_stream[148:145] <= 4'b1000; // DLC
+        test_stream[144:81] <= 64'hd3359da81bd963e5; // Data
+
+        test_stream[80:66] <= 15'd0; // CRC
+        test_stream[65] <= 1'b0; // CRC Delim
+
+        test_stream[64] <= 1'b1; // ACK
+        test_stream[63] <= 1'b0; // ACK Delim
+
+        test_stream[62:55] <= 7'b0000000; // EOF
+        test_stream[54:0] <= 0;
+
+        clear_crc <= 1;
+        #1;
+
+        clear_crc <= 0;
+        #1;
+
+        for (i = 163; i >= 81; i = i - 1) begin
+            next_bit <= test_stream[i];
+            update_crc <= 1;
+            #0.01;
+            update_crc <= 0;
+            #0.01;
+        end
+
+        test_stream[80:66] <= ~crc;
+
+        #1;
+
+        for (i = 163; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // Extended ID Msg with data
+        test_stream[163] <= 1; // SOF
+        test_stream[162:152] <= ~11'b10001010101; // Base ID
+        test_stream[151] <= 0; // SRR
+        test_stream[150] <= 0; // IDE
+        test_stream[149:132] <= 18'b100010101010101010; // Extended ID
+        test_stream[131] <= 1; // RTR
+        test_stream[130:129] <= 2'b11; // Reserved
+        test_stream[128:125] <= 4'b1000; // DLC
+        test_stream[124:61] <= 64'hd3359da81bd963e5 ^ 64'b1010101010101010101010101010101010101010101010101010101010101010; // Datas
+        test_stream[45] <= 1'b0; // CRC Delim
+
+        test_stream[44] <= 1'b1; // ACK
+        test_stream[43] <= 1'b0; // ACK Delim
+
+        test_stream[42:35] <= 7'b0000000; // EOF
+        test_stream[34:0] <= 0;
+
+        clear_crc <= 1;
+        #1;
+
+        clear_crc <= 0;
+        #1;
+
+        for (i = 163; i >= 61; i = i - 1) begin
+            next_bit <= test_stream[i];
+            update_crc <= 1;
+            #0.01;
+            update_crc <= 0;
+            #0.01;
+        end
+
+        test_stream[60:46] <= crc;
+
+        #1;
+
+        for (i = 163; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // High CRC Delim
+        test_stream[45] <= 1'b1; // CRC Delim
+
+        #1;
+
+        for (i = 163; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+        // High Ack Delim
+        test_stream[43] <= 1'b1; // CRC Delim
+
+        #1;
+
+        for (i = 163; i >= 0; i = i - 1) begin
+            rx = test_stream[i];
+            updated_sample = 1;
+            #1;
+            updated_sample = 0;
+            #1;
+        end
+
+
+    end
+endmodule
+
 module crc_tb;
     reg next_bit, clear_crc, update_crc;
     wire [14:0] crc;
-    reg [14:0] can_poly;
-    reg [14:0] xor_test;
-
     reg [63:0] test_stream;
 
     integer i;
@@ -19,8 +258,6 @@ module crc_tb;
         $dumpfile("can.lx2");
         $dumpvars(0, test_stream);
         $dumpvars(0, crcsm);
-
-
 
         // Init
         clear_crc <= 1;
@@ -40,10 +277,7 @@ module crc_tb;
 
         $display("Data: %h", test_stream);
         $display("CRC: %h", crc);
-
-
     end
-
 endmodule
 
 module txp_tb;
@@ -213,7 +447,6 @@ module rxp_tb;
             updated_sample <= 0;
         end
     end
-
 endmodule
 
 module ssm_tb;
@@ -262,5 +495,4 @@ module ssm_tb;
 
 
     end
-
 endmodule
