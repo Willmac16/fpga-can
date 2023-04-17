@@ -4,6 +4,72 @@
 
 `timescale 10 ns / 1 ps
 
+module send_tb;
+    reg msg_exists, rtr, extended;
+    wire stuff_bypass, tx, running_start, transmission_error;
+
+    reg [28:0] msg_id;
+    reg [63:0] msg;
+    reg [3:0] num_bytes;
+
+    reg rx, stuff_error, updated_sample;
+    wire [63:0] msg_out;
+    wire [28:0] msg_id_out;
+    wire [3:0] num_bytes_out;
+    wire rtr_out, extended_out, bus_idle_out, FORM_ERROR_out, OVERLOAD_ERROR_out, fire_an_ack_out, msg_fresh_out;
+    message_sender sender (.bit_advance(updated_sample), .msg_id(msg_id), .extended(extended), .rtr(rtr), .msg(msg), .msg_exists(msg_exists), .tx(tx), .stuff_bypass(stuff_bypass), .num_bytes(num_bytes), .running_start(running_start), .restart(transmission_error));
+    message_reciever reciever (.updated_sample(updated_sample), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_out), .rtr(rtr_out), .extended(extended_out), .msg(msg_out), .bus_idle(bus_idle_out), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_out), .OVERLOAD_ERROR(OVERLOAD_ERROR_out), .fire_an_ack(fire_an_ack_out), .msg_fresh(msg_fresh_out), .msg_bytes(num_bytes_out), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
+
+    integer i;
+
+    initial begin
+        $dumpfile("can.lx2");
+        $dumpvars(0, sender);
+        $dumpvars(0, reciever);
+
+        // Init
+        stuff_error <= 0;
+        updated_sample <= 0;
+        msg_exists <= 0;
+
+        // Valid MSG
+        msg_id[28:18] <= 11'b01100110011; // ID
+        msg_id[17:0] <= 0;
+
+        extended <= 0;
+        rtr <= 0;
+
+        num_bytes <= 5;
+        msg[63:30] <= 0;
+        msg[39:0] <= 40'h0BADC0FFEE;
+
+        msg_exists <= 1;
+        #1;
+        rx <= 0;
+        updated_sample <= 1;
+        #1;
+        updated_sample <= 0;
+        #1;
+        rx <= 1; // SOF
+        updated_sample <= 1;
+        #1;
+        updated_sample <= 0;
+        #1;
+
+        for (i = 0; i < 280; i = i + 1) begin
+            rx <= tx;
+            updated_sample <= 1;
+            #1;
+            updated_sample <= 0;
+            #1;
+        end
+
+
+
+
+    end
+endmodule
+
 module recieve_tb;
     reg updated_sample, rx, stuff_error;
 

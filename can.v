@@ -191,31 +191,6 @@ module tx_pipeline(
     end
 endmodule
 
-
-// module bit_error_machine(
-//     input rx,
-//     input tx,
-//     input sample_update,
-//     output reg agrement
-// );
-//     always @(posedge sample_update)
-//         agrement = rx ^ tx;
-// endmodule
-
-// module send_machine(
-//     input out_bit,
-//     input send_tick,
-//     input bit_error,
-//     output reg tx_wire
-// );
-//     always @(posedge send_tick) begin
-//         if (!bit_error)
-//             tx_wire = out_bit;
-//         else
-//             tx_wire = 0;
-//     end
-// endmodule
-
 // module error_machine(
 //     input FORM_ERROR,
 //     input OVERLOAD,
@@ -234,11 +209,38 @@ endmodule
 //     // TODO: Implement Error Counts
 // endmodule
 
+// This single stateless machine handles all the competing interests for the tx line
+//
+module send_machine(
+    input bus_idle, // if the bus is idle & a tx msg is ready this will SOF
+    input tx_msg_exists,
+    input fire_an_ack,
+    input fire_an_error,
+    input sync_tick,
+    output reg tx_line
+);
+    always @(posedge sync_tick) begin
+        tx_line <= fire_an_error | (fire_an_ack & !bus_idle) | (bus_idle & tx_msg_exists);
+    end
+endmodule
+
+
+module bit_error_machine(
+    input rx,
+    input tx,
+    input sample_update,
+    output reg agreement
+);
+    always @(posedge sample_update)
+        agreement <= rx ^ tx;
+endmodule
+
 // State Machine Updated once per bit
 module message_reciever(
     input updated_sample,
     input rx,
     input stuff_error,
+    input bit_error,
     output reg [28:0] msg_id,
     output reg rtr,
     output reg extended,
@@ -286,7 +288,7 @@ module message_reciever(
                     msg_fresh <= 0;
                     clear_crc = 1;
                     update_crc <= 1;
-                    running_start <= 0;
+                    running_start <= 1;
                     transmission_error <= 0;
                 end
             end
@@ -294,12 +296,15 @@ module message_reciever(
                 clear_crc <= 0;
 
                 update_crc <= 1;
+                running_start <= 0;
 
                 msg_id[id_bit] <= rx;
                 id_bit <= id_bit - 1;
 
                 if (id_bit == 18 || id_bit == 0)
                     state <= 2;
+
+                transmission_error |= bit_error;
             end
             2: begin // RTR / SRR
                 update_crc <= 1;
@@ -307,18 +312,24 @@ module message_reciever(
                 rtr <= rx;
 
                 state <= extended ? 4 : 3; // R1 or IDE
+
+                transmission_error |= bit_error;
             end
             3: begin // IDE
                 update_crc <= 1;
 
                 extended <= !rx;
                 state <= rx ? 5 : 1; // R0 or Finish ID
+
+                transmission_error |= bit_error;
             end
             4, // R1
             5: begin // R0
                 update_crc <= 1;
 
                 state <= state + 1;
+
+                transmission_error |= bit_error;
             end
             6, // DLC 3
             7, // DLC 2
@@ -327,6 +338,8 @@ module message_reciever(
 
                 DLC[9 - state] <= rx;
                 state <= state + 1;
+
+                transmission_error |= bit_error;
             end
             9: begin // DLC 0
                 update_crc <= 1;
@@ -342,6 +355,8 @@ module message_reciever(
                 end
 
                 crc_bit <= 14;
+
+                transmission_error |= bit_error;
             end
             10: begin // Data
                 update_crc <= 1;
@@ -350,6 +365,8 @@ module message_reciever(
                 msg[bit_counter] <= rx;
 
                 state <= bit_counter == 0 ? 11 : 10;
+
+                transmission_error |= bit_error;
             end
             11: begin // CRC
                 crc_recieved[crc_bit] <= rx;
@@ -358,11 +375,14 @@ module message_reciever(
                     state <= 12;
                     stuff_bypass <= 1; // Disable stuffing now that the CRC is done
                 end
+
+                transmission_error |= bit_error;
             end
             12: begin // CRC Delim
                 state <= rx ? 31 : 13;
 
                 FORM_ERROR <= rx;
+                transmission_error <= rx;
                 // Arm the ACK
                 fire_an_ack <= crc_recieved == crc_computed;
                 throw_after_ack <= crc_recieved != crc_computed;
@@ -373,11 +393,13 @@ module message_reciever(
                 state <= rx ? 14 : 31;
 
                 FORM_ERROR <= !rx;
+                transmission_error <= !rx;
             end
             14: begin // ACK Delim
                 state <= (rx | throw_after_ack) ? 31 : 15;
 
                 FORM_ERROR <= rx | throw_after_ack;
+                transmission_error <= rx;
             end
             15, // EOF 1
             16, // EOF 2
@@ -429,6 +451,7 @@ module message_reciever(
             end
             30, // Overload Packet
             31: begin // Form Error
+                fire_an_ack <= 0;
                 state <= rx ? 31 : 32;
             end
             32, // Error Delim 2
@@ -463,6 +486,7 @@ module message_sender(
     input restart,
     input [3:0] num_bytes,
     input [63:0] msg,
+    input msg_exists,
     input running_start,
     output reg stuff_bypass,
     output reg tx
@@ -478,146 +502,160 @@ module message_sender(
 
     assign DLC = num_bytes & (num_bytes[3] ? 4'b1000 : 4'b0111); // Cap at 8 bytes
 
-    reg update_crc, clear_crc;
+    reg update_crc, clear_crc, crc_rs;
     wire [14:0] crc_computed;
 
-    crc_step_machine crcer (.next_bit(tx), .update_crc(update_crc), .clear_crc(clear_crc), .crc(crc_computed));
+    crc_step_machine crcer (.next_bit(tx), .update_crc(update_crc), .clear_crc(clear_crc), .crc(crc_computed), .running_start(crc_rs));
 
 
     always @(posedge restart) begin
         state <= 0;
+        clear_crc <= 1;
     end
 
     always @(posedge running_start) begin
         state <= 1;
-        id_bit <= 28;
+        id_bit <= 27;
         stuff_bypass <= 0;
 
-        tx = 1;
-        update_crc <= 1;
+        tx = msg_id[28];
+        crc_rs <= 1;
+    end
+
+    always @(negedge running_start) begin
+        crc_rs <= 0;
     end
 
 
     // tx assignments need to be blocking so that CRC is computed after the bit updates
     always @(posedge bit_advance) begin
-        case (state) // These nums do not match the state machine in the receiver
-            0: begin // Start of Frame
-                tx = 1;
-                state <= 1;
-                id_bit <= 28;
-                stuff_bypass <= 0;
+        if (!restart && msg_exists) begin // Holding restart high will freeze the state machine
+            case (state) // These nums do not match the state machine in the receiver
+                0: begin // Start of Frame
+                    tx = 1;
+                    state <= 1;
+                    id_bit <= 28;
+                    stuff_bypass <= 0;
 
-                update_crc <= 1;
-            end
-            1: begin // ID
-                tx = msg_id[id_bit];
-                id_bit <= id_bit - 1;
+                    update_crc <= 1;
+                end
+                1: begin // ID
+                    tx = msg_id[id_bit];
+                    id_bit <= id_bit - 1;
 
-                if (id_bit == 18)
-                    state <= extended ? 2 : 3; // SRR or RTR
-                else if (id_bit == 0)
-                    state <= 3; // RTR
+                    if (id_bit == 18)
+                        state <= extended ? 2 : 3; // SRR or RTR
+                    else if (id_bit == 0)
+                        state <= 3; // RTR
 
-                update_crc <= 1;
-            end
-            2: begin // SRR
-                tx = 0;
-                state <= 4; // IDE
+                    update_crc <= 1;
+                end
+                2: begin // SRR
+                    tx = 0;
+                    state <= 4; // IDE
 
-                update_crc <= 1;
-            end
-            3: begin // RTR
-                tx = rtr;
-                state <= extended ? 5 : 4; // R1 or IDE
+                    update_crc <= 1;
+                end
+                3: begin // RTR
+                    tx = rtr;
+                    state <= extended ? 5 : 4; // R1 or IDE
 
-                update_crc <= 1;
-            end
-            4: begin // IDE
-                tx = !extended;
-                state <= extended ? 1 : 5; // ID or R1
+                    update_crc <= 1;
+                end
+                4: begin // IDE
+                    tx = !extended;
+                    state <= extended ? 1 : 6; // ID or R1
 
-                update_crc <= 1;
-            end
-            5: begin // R1
-                tx = 1;
-                state <= 6; // R0
+                    update_crc <= 1;
+                end
+                5: begin // R1
+                    tx = 1;
+                    state <= 6; // R0
 
-                update_crc <= 1;
-            end
-            6: begin // R0
-                tx = 0;
-                state <= 7; // DLC 3
+                    update_crc <= 1;
+                end
+                6: begin // R0
+                    tx = 0;
+                    state <= 7; // DLC 3
 
-                update_crc <= 1;
-            end
-
-
-
-            7, // DLC 3
-            8, // DLC 2
-            9: begin // DLC 1
-                tx <= DLC[10 - state];
-                state <= state + 1;
-            end
-            10: begin // DLC 0
-                tx <= DLC[0];
-                state <= (DLC == 0) ? 12 : 11; // CRC or Data
-
-                if (DLC != 0) begin
-                    bit_counter[5:3] <= DLC - 1;
-                    bit_counter[2:0] <= 3'b111;
+                    update_crc <= 1;
                 end
 
-                crc_bit <= 14;
-            end
-            11: begin // Data
-                bit_counter <= bit_counter - 1;
 
-                tx <= msg[bit_counter];
 
-                state <= bit_counter == 0 ? 12 : 11; // CRC or More Data
-            end
-            12: begin // CRC
-                tx <= crc_computed[crc_bit];
-                crc_bit <= crc_bit - 1;
+                7, // DLC 3
+                8, // DLC 2
+                9: begin // DLC 1
+                    tx = DLC[10 - state];
+                    state <= state + 1;
 
-                state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
-            end
-            13: begin // CRC Delim
-                tx <= 0;
-                state <= 14;
+                    update_crc <= 1;
+                end
+                10: begin // DLC 0
+                    tx = DLC[0];
+                    state <= (DLC == 0) ? 12 : 11; // CRC or Data
 
-                stuff_bypass <= 1;
-            end
-            14: begin // ACK Slot
-                tx <= 0;
-                state <= 15;
-            end
-            15: begin // ACK Delim
-                tx <= 0;
-                state <= 16;
-            end
-            16, // EOF 1
-            17, // EOF 2
-            18, // EOF 3
-            19, // EOF 4
-            20, // EOF 5
-            21, // EOF 6
-            22, // EOF 7
-            23, // Intermission 1
-            24: begin // Intermission 2
-                tx <= 0;
-                state <= state + 1;
-            end
-            25: begin // Intermission 3
-                tx <= 0;
-                state <= 0;
-            end
-        endcase
+                    if (DLC != 0) begin
+                        bit_counter[5:3] <= DLC - 1;
+                        bit_counter[2:0] <= 3'b111;
+                    end
+
+                    crc_bit <= 14;
+
+                    update_crc <= 1;
+                end
+                11: begin // Data
+                    bit_counter <= bit_counter - 1;
+
+                    tx = msg[bit_counter];
+
+                    state <= bit_counter == 0 ? 12 : 11; // CRC or More Data
+
+                    update_crc <= 1;
+                end
+                12: begin // CRC
+                    tx <= crc_computed[crc_bit];
+                    crc_bit <= crc_bit - 1;
+
+                    state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
+                end
+                13: begin // CRC Delim
+                    tx <= 0;
+                    state <= 14;
+
+                    stuff_bypass <= 1;
+                end
+                14: begin // ACK Slot
+                    tx <= 0;
+                    state <= 15;
+                end
+                15: begin // ACK Delim
+                    tx <= 0;
+                    state <= 16;
+                end
+                16, // EOF 1
+                17, // EOF 2
+                18, // EOF 3
+                19, // EOF 4
+                20, // EOF 5
+                21, // EOF 6
+                22, // EOF 7
+                23, // Intermission 1
+                24: begin // Intermission 2
+                    tx <= 0;
+                    state <= state + 1;
+                end
+                25: begin // Intermission 3
+                    tx <= 0;
+                    state <= 0;
+                end
+            endcase
+        end
     end
 
     always @(negedge bit_advance) begin
         update_crc <= 0;
+        clear_crc <= 0;
     end
 endmodule
 
@@ -625,6 +663,7 @@ module crc_step_machine (
     input next_bit,
     input clear_crc,
     input update_crc,
+    input running_start,
     output [14:0] crc
 );
     assign crc = crc_reg [14:0];
@@ -633,6 +672,14 @@ module crc_step_machine (
 
     always @(posedge clear_crc) begin
         crc_reg <= 0;
+    end
+
+    // Resets the CRC to value given SOF and computes CRC given first bit of ID
+    always @(posedge running_start) begin
+        crc_reg = {15'h4599, 1'b0};
+
+        if (next_bit ^ crc_reg[15])
+            crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;
     end
 
     always @(posedge update_crc) begin
