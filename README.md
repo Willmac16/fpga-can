@@ -19,8 +19,8 @@ A CAN 2.0B Controller for FPGAs written in Verilog
   * [x] Written
   * [x] Rewritten
   * [x] Test Benched
-* [  ] Send Machine (Gets told what to send and when to send it)
-  * [ ] Written
+* [ ] Send Machine (Gets told what to send and when to send it)
+  * [x] Written
   * [ ] Test Benched
 * [x] Message Reciever (Takes in the rx pipeline and keeps track of the buses current state)
   * [x] Written
