@@ -1,20 +1,202 @@
-// module top (
-//     input rst,
-//     input rx_raw,
-//     input tx_raw,
-//     input clk
-// );
-//     reg [6:0] RJW = 5;
-//     wire bus_idle;
+module can_transciever(
+    input rx_raw,
+    output tx_raw,
+    input clk,
+    input [28:0] tx_msg_id,
+    input tx_rtr,
+    input tx_extended,
+    input [63:0] tx_msg,
+    input [3:0] tx_msg_bytes,
+    input tx_msg_exists,
+    output [28:0] rx_msg_id,
+    output rx_rtr,
+    output rx_extended,
+    output [63:0] rx_msg,
+    output [3:0] rx_msg_bytes,
+    output rx_msg_fresh,
+    output transmission_error,
+    output clean_send
+);
+    reg [6:0] RJW = 5;
 
-//     sync_sample_machine ssm (
-//         .rx_raw(rx_raw),
-//         .clk(clk),
-//         .RJW(RJW),
-//         .bus_idle(bus_idle),
-//         .rx(rx)
-//     );
-// endmodule
+    // SSM Outs
+    wire ssm_rx, ssm_update, ssm_sync;
+
+    // Reciever Outs
+    wire bus_idle, stuff_bypass, fire_an_ack, running_start;
+
+    // rx Pipeline Outs
+    wire pipe_rx, pipe_update, stuff_error;
+
+    // Sender Outs
+    wire sender_tx, sender_stuff_bypass;
+
+    // tx Pipeline Outs
+    wire pipe_tx, pipe_bit_advance;
+
+    // bit error machine Outs
+    wire bit_error;
+
+    // running start nonsense
+    wire [1:0] txp_running_start;
+
+
+    sync_sample_machine ssm(
+        .rx_raw(rx_raw),
+        .clk(clk),
+        .RJW(RJW),
+        .bus_idle(bus_idle),
+        .rx(ssm_rx),
+        .sync_tick(ssm_sync),
+        .updated_sample(ssm_update)
+    );
+
+    rx_pipeline rx_pipe(
+        .rx(ssm_rx),
+        .updated_sample(ssm_update),
+        .stuff_bypass(stuff_bypass),
+        .updated_bit(pipe_update),
+        .next_bit(pipe_rx),
+        .stuff_error(stuff_error)
+    );
+
+    message_reciever msg_rec(
+        .updated_sample(pipe_update),
+        .rx(pipe_rx),
+        .stuff_error(stuff_error),
+        .bit_error(bit_error),
+        .msg_exists(tx_msg_exists),
+        // Message output block
+        .msg_id(rx_msg_id),
+        .rtr(rx_rtr),
+        .extended(rx_extended),
+        .msg(rx_msg),
+        .msg_bytes(rx_msg_bytes),
+        .msg_fresh(rx_msg_fresh),
+        // End Message output block
+        .bus_idle(bus_idle),
+        .stuff_bypass(stuff_bypass),
+        .fire_an_ack(fire_an_ack),
+        .running_start(running_start),
+        .transmission_error(transmission_error)
+    );
+
+    tx_pipeline tx_pipe(
+        .next_bit(sender_tx),
+        .stuff_bypass(sender_stuff_bypass),
+        .updated_sample(ssm_update),
+        .running_start(txp_running_start),
+        .tx(pipe_tx),
+        .bit_advance(pipe_bit_advance)
+    );
+
+    message_sender msg_send(
+        .bit_advance(pipe_bit_advance),
+        // Message input block
+        .msg_id(tx_msg_id),
+        .rtr(tx_rtr),
+        .extended(tx_extended),
+        .msg(tx_msg),
+        .num_bytes(tx_msg_bytes),
+        .msg_exists(tx_msg_exists),
+        // End Message input block
+        .restart(transmission_error),
+        .running_start(running_start),
+        .tx(sender_tx),
+        .stuff_bypass(sender_stuff_bypass),
+        .clean_send(clean_send),
+        .txp_running_start(txp_running_start)
+    );
+
+    send_machine send(
+        .bus_idle(bus_idle),
+        .tx_msg_exists(tx_msg_exists),
+        .fire_an_ack(fire_an_ack),
+        .fire_an_error(1'b0),
+        .pipeline_val(pipe_tx),
+        .sync_tick(ssm_sync),
+        .tx_line(tx_raw)
+    );
+
+    bit_error_machine bit_err(
+        .rx(rx_raw),
+        .tx(tx_raw),
+        .sample_update(ssm_update),
+        .disagreement(bit_error)
+    );
+endmodule
+
+module can_reciever(
+    input rx_raw,
+    output tx_raw,
+    input clk,
+    output [28:0] msg_id,
+    output rtr,
+    output extended,
+    output [63:0] msg,
+    output [3:0] msg_bytes,
+    output msg_fresh
+);
+    reg [6:0] RJW = 5;
+
+    // SSM Outs
+    wire ssm_rx, ssm_update, ssm_sync;
+
+    // Reciever Outs
+    wire bus_idle, stuff_bypass, fire_an_ack;
+
+    // Pipeline Outs
+    wire pipe_rx, pipe_update, stuff_error;
+
+
+    sync_sample_machine ssm(
+        .rx_raw(rx_raw),
+        .clk(clk),
+        .RJW(RJW),
+        .bus_idle(bus_idle),
+        .rx(ssm_rx),
+        .sync_tick(ssm_sync),
+        .updated_sample(ssm_update)
+    );
+
+    rx_pipeline rx_pipe(
+        .rx(ssm_rx),
+        .updated_sample(ssm_update),
+        .stuff_bypass(stuff_bypass),
+        .updated_bit(pipe_update),
+        .next_bit(pipe_rx),
+        .stuff_error(stuff_error)
+    );
+
+    message_reciever msg_rec(
+        .updated_sample(pipe_update),
+        .rx(pipe_rx),
+        .stuff_error(stuff_error),
+        .bit_error(1'b0),
+        .msg_exists(1'b0),
+        // Message output block
+        .msg_id(msg_id),
+        .rtr(rtr),
+        .extended(extended),
+        .msg(msg),
+        .msg_bytes(msg_bytes),
+        .msg_fresh(msg_fresh),
+        // End Message output block
+        .bus_idle(bus_idle),
+        .stuff_bypass(stuff_bypass),
+        .fire_an_ack(fire_an_ack)
+    );
+
+    send_machine send(
+        .bus_idle(bus_idle),
+        .tx_msg_exists(1'b0),
+        .fire_an_ack(fire_an_ack),
+        .fire_an_error(1'b0),
+        .pipeline_val(1'b0),
+        .sync_tick(ssm_sync),
+        .tx_line(tx_raw)
+    );
+endmodule
 
 module sync_sample_machine(
     input rx_raw,
@@ -23,7 +205,7 @@ module sync_sample_machine(
     input bus_idle,
     output reg rx,
     output reg sync_tick,
-    output reg updated_sample
+    output reg updated_sample = 0
 );
 
     reg [8:0] current_quantum = 0;
@@ -38,7 +220,7 @@ module sync_sample_machine(
         cycle_length <= prop_seg + phase_seg_one + phase_seg_two + 1;
 
     // Synchronization
-    always @(rx_raw) begin
+    always @(posedge rx_raw) begin
         if (bus_idle)
             current_quantum <= 0; // Hard Sync
         else begin
@@ -65,10 +247,9 @@ module sync_sample_machine(
 
         if (current_quantum == 1 + prop_seg + phase_seg_one) begin
             rx <= rx_raw;
-            updated_sample <= 0;
-
+            updated_sample <= 1;
         end else
-            updated_sample <= 1; // Wait a tick to flag the sample update
+            updated_sample <= 0;
     end
 endmodule
 
@@ -131,19 +312,22 @@ endmodule
 
 module tx_pipeline(
     input next_bit,
-    input updated_sample,
+    input updated_sample, // This tick is used so the pipeline is ready at the next sync tick
     input stuff_bypass,
-    input running_start,
-    output reg tx,
-    output reg bit_advance
+    input [1:0] running_start,
+    output reg tx = 0,
+    output reg bit_advance = 0
 );
     reg [4:0] stuff_history;
     reg [4:0] history_valid;
 
-    always @(posedge running_start) begin
-        stuff_history <= 5'b10000;
-        history_valid <= 5'b10000;
-        bit_advance <= 1;
+    // Insert SOF that already happened into history and forward the first bit of the id
+    always @(posedge running_start[0]) begin
+        stuff_history <= {running_start[1], 4'b1000};
+        history_valid <= 5'b11000;
+
+        tx <= running_start[1];
+        bit_advance <= 0;
     end
 
 
@@ -216,11 +400,12 @@ module send_machine(
     input tx_msg_exists,
     input fire_an_ack,
     input fire_an_error,
+    input pipeline_val,
     input sync_tick,
     output reg tx_line
 );
     always @(posedge sync_tick) begin
-        tx_line <= fire_an_error | (fire_an_ack & !bus_idle) | (bus_idle & tx_msg_exists);
+        tx_line <= fire_an_error | (fire_an_ack & !bus_idle) | (bus_idle & tx_msg_exists) | pipeline_val;
     end
 endmodule
 
@@ -229,10 +414,10 @@ module bit_error_machine(
     input rx,
     input tx,
     input sample_update,
-    output reg agreement
+    output reg disagreement
 );
     always @(posedge sample_update)
-        agreement <= rx ^ tx;
+        disagreement <= rx ^ tx;
 endmodule
 
 // State Machine Updated once per bit
@@ -241,19 +426,20 @@ module message_reciever(
     input rx,
     input stuff_error,
     input bit_error,
+    input msg_exists,
     output reg [28:0] msg_id,
     output reg rtr,
     output reg extended,
-    output reg [63:0] msg,
+    output reg [63:0] msg = 0,
     output reg [3:0] msg_bytes,
-    output reg bus_idle,
+    output reg msg_fresh,
+    output reg bus_idle = 1,
     output reg stuff_bypass,
     output reg FORM_ERROR,
     output reg OVERLOAD_ERROR,
-    output reg fire_an_ack,
-    output reg msg_fresh,
-    output reg running_start,
-    output reg transmission_error
+    output reg fire_an_ack = 0,
+    output reg running_start = 0,
+    output reg transmission_error = 0
 );
     reg [14:0] crc_recieved;
     wire [14:0] crc_computed;
@@ -290,13 +476,13 @@ module message_reciever(
                     update_crc <= 1;
                     running_start <= 1;
                     transmission_error <= 0;
+                    fire_an_ack <= 0;
                 end
             end
             1: begin // Base ID
                 clear_crc <= 0;
 
                 update_crc <= 1;
-                running_start <= 0;
 
                 msg_id[id_bit] <= rx;
                 id_bit <= id_bit - 1;
@@ -384,7 +570,7 @@ module message_reciever(
                 FORM_ERROR <= rx;
                 transmission_error <= rx;
                 // Arm the ACK
-                fire_an_ack <= crc_recieved == crc_computed;
+                fire_an_ack <= (crc_recieved == crc_computed) && (!msg_exists || transmission_error);
                 throw_after_ack <= crc_recieved != crc_computed;
             end
             13: begin // ACK Slot
@@ -416,8 +602,6 @@ module message_reciever(
             end
             21: // EOF 7
             begin
-                // Tell our transmitter there is an issue
-                transmission_error <= 1;
                 state <= 22;
             end
 
@@ -446,8 +630,10 @@ module message_reciever(
 
                     running_start <= 1; // Fire up the sender machine on the first bit of arb
                     transmission_error <= 0;
-                end else
+                end else begin
                     state <= 0;
+                    bus_idle <= 1;
+                end
             end
             30, // Overload Packet
             31: begin // Form Error
@@ -474,8 +660,10 @@ module message_reciever(
         endcase
     end
 
-    always @(negedge updated_sample)
+    always @(negedge updated_sample) begin
         update_crc <= 0;
+        running_start <= 0;
+    end
 endmodule
 
 module message_sender(
@@ -488,10 +676,12 @@ module message_sender(
     input [63:0] msg,
     input msg_exists,
     input running_start,
-    output reg stuff_bypass,
-    output reg tx
+    output reg stuff_bypass = 0,
+    output reg tx = 0,
+    output reg clean_send = 0,
+    output [1:0] txp_running_start
 );
-    reg [5:0] state;
+    reg [5:0] state = 0;
     reg [4:0] id_bit;
 
     wire [3:0] DLC;
@@ -502,8 +692,11 @@ module message_sender(
 
     assign DLC = num_bytes & (num_bytes[3] ? 4'b1000 : 4'b0111); // Cap at 8 bytes
 
-    reg update_crc, clear_crc, crc_rs;
+    reg update_crc = 0, clear_crc = 0;
+    reg [1:0] crc_rs = 0;
     wire [14:0] crc_computed;
+
+    assign txp_running_start = crc_rs;
 
     crc_step_machine crcer (.next_bit(tx), .update_crc(update_crc), .clear_crc(clear_crc), .crc(crc_computed), .running_start(crc_rs));
 
@@ -515,11 +708,12 @@ module message_sender(
 
     always @(posedge running_start) begin
         state <= 1;
-        id_bit <= 27;
+        id_bit <= 26;
         stuff_bypass <= 0;
 
-        tx = msg_id[28];
-        crc_rs <= 1;
+        // Fire up the CRC and Pipeline
+        tx = msg_id[27];
+        crc_rs <={msg_id[28], 1'b1};
     end
 
     always @(negedge running_start) begin
@@ -529,9 +723,9 @@ module message_sender(
 
     // tx assignments need to be blocking so that CRC is computed after the bit updates
     always @(posedge bit_advance) begin
-        if (!restart && msg_exists) begin // Holding restart high will freeze the state machine
+        if (!restart && msg_exists && !running_start) begin // Holding restart high will freeze the state machine
             case (state) // These nums do not match the state machine in the receiver
-                0: begin // Start of Frame
+                0: begin // Start of Frame // This never actually gets called
                     tx = 1;
                     state <= 1;
                     id_bit <= 28;
@@ -580,9 +774,6 @@ module message_sender(
 
                     update_crc <= 1;
                 end
-
-
-
                 7, // DLC 3
                 8, // DLC 2
                 9: begin // DLC 1
@@ -642,12 +833,12 @@ module message_sender(
                 22, // EOF 7
                 23, // Intermission 1
                 24: begin // Intermission 2
+                    clean_send <= state == 24;
                     tx <= 0;
                     state <= state + 1;
                 end
                 25: begin // Intermission 3
                     tx <= 0;
-                    state <= 0;
                 end
             endcase
         end
@@ -656,6 +847,7 @@ module message_sender(
     always @(negedge bit_advance) begin
         update_crc <= 0;
         clear_crc <= 0;
+        clean_send <= 0;
     end
 endmodule
 
@@ -663,7 +855,7 @@ module crc_step_machine (
     input next_bit,
     input clear_crc,
     input update_crc,
-    input running_start,
+    input [1:0] running_start,
     output [14:0] crc
 );
     assign crc = crc_reg [14:0];
@@ -675,8 +867,13 @@ module crc_step_machine (
     end
 
     // Resets the CRC to value given SOF and computes CRC given first bit of ID
-    always @(posedge running_start) begin
+    always @(posedge running_start[0]) begin
         crc_reg = {15'h4599, 1'b0};
+
+        if (running_start[1] ^ crc_reg[15])
+            crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;
+
+        crc_reg = {crc_reg[14:0], 1'b0};
 
         if (next_bit ^ crc_reg[15])
             crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;

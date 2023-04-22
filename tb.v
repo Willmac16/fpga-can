@@ -1,8 +1,86 @@
-// Can2040 will hit 1Mbit/s == 1 microsecond nominal bit time
-// Alchitry Clock is 100 MHz == 0.01 microseconds per clock
+// Aiming for 1Mbit/s == 1 microsecond nominal bit time
+// Alchitry Cu Clock is 100 MHz == 0.01 microseconds per clock
 // 100 quanta per bit time
 
-`timescale 10 ns / 1 ps
+`timescale 10 ns / 10 ns
+
+module stuffed_transciever_tb;
+    wire can_bus;
+
+    // Global Clock
+    reg clk;
+
+    // Transciever inputs
+    reg [63:0] tx_msg;
+    reg [28:0] tx_msg_id;
+    reg [3:0] tx_msg_bytes;
+    reg tx_rtr, tx_extended, tx_msg_exists;
+
+    wire txcr_tx, rcr_tx;
+    wire clean_send;
+
+    can_transciever txcr (.rx_raw(can_bus), .tx_raw(txcr_tx), .clk(clk), .tx_msg(tx_msg), .tx_msg_id(tx_msg_id), .tx_msg_bytes(tx_msg_bytes), .tx_rtr(tx_rtr), .tx_extended(tx_extended), .tx_msg_exists(tx_msg_exists), .clean_send(clean_send));
+    can_reciever rcr (.rx_raw(can_bus), .tx_raw(rcr_tx), .clk(clk));
+
+    assign can_bus = txcr_tx | rcr_tx;
+
+    integer i = 0;
+
+    always @(posedge clean_send) begin
+        $display("TX: %b %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, txcr_tx, clean_send);
+
+
+        tx_msg_exists <= 1;
+        tx_msg_id <= (tx_msg_id << 1) ^ 29'b10000000101010010010110100110;
+        tx_msg_bytes <= 8;
+        tx_rtr <= ~tx_rtr;
+        tx_extended <= 1;
+        tx_msg <= (tx_msg << 1) ^ 64'hDEADBEEFDEADBEEF;
+    end
+
+    initial begin
+        $dumpfile("can.lx2");
+        $dumpvars(0, txcr);
+        $dumpvars(0, rcr);
+        $dumpvars(0, clk);
+        $dumpvars(0, can_bus);
+
+        // Init the TXCR with nothing
+        tx_msg_exists <= 0;
+        tx_msg_id <= 0;
+        tx_msg_bytes <= 0;
+        tx_rtr <= 0;
+        tx_extended <= 0;
+        tx_msg <= 0;
+
+        clk <= 0;
+
+        #1;
+
+        // Idle the bus
+        for (i = 0; i < 5000; i = i + 1) begin
+            clk <= ~clk;
+            #1;
+        end
+
+        // Create a message
+        tx_msg_exists <= 1;
+        tx_msg_id <= {11'b01100110011, 18'b0};
+        tx_msg_bytes <= 5;
+        tx_rtr <= 0;
+        tx_extended <= 0;
+        tx_msg <= {24'd0, 40'h0BADC0FFEE};
+
+        // Send the message
+        for (i = 0; i < 1000000; i = i + 1) begin
+            clk <= ~clk;
+            #1;
+        end
+
+    end
+
+
+endmodule
 
 module send_tb;
     reg msg_exists, rtr, extended;
@@ -18,7 +96,14 @@ module send_tb;
     wire [3:0] num_bytes_out;
     wire rtr_out, extended_out, bus_idle_out, FORM_ERROR_out, OVERLOAD_ERROR_out, fire_an_ack_out, msg_fresh_out;
     message_sender sender (.bit_advance(updated_sample), .msg_id(msg_id), .extended(extended), .rtr(rtr), .msg(msg), .msg_exists(msg_exists), .tx(tx), .stuff_bypass(stuff_bypass), .num_bytes(num_bytes), .running_start(running_start), .restart(transmission_error));
-    message_reciever reciever (.updated_sample(updated_sample), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_out), .rtr(rtr_out), .extended(extended_out), .msg(msg_out), .bus_idle(bus_idle_out), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_out), .OVERLOAD_ERROR(OVERLOAD_ERROR_out), .fire_an_ack(fire_an_ack_out), .msg_fresh(msg_fresh_out), .msg_bytes(num_bytes_out), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
+    message_reciever reciever (.updated_sample(updated_sample), .msg_exists(1'b1), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_out), .rtr(rtr_out), .extended(extended_out), .msg(msg_out), .bus_idle(bus_idle_out), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_out), .OVERLOAD_ERROR(OVERLOAD_ERROR_out), .fire_an_ack(fire_an_ack_out), .msg_fresh(msg_fresh_out), .msg_bytes(num_bytes_out), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
+
+
+    wire [63:0] msg_remote;
+    wire [28:0] msg_id_remote;
+    wire [3:0] num_bytes_remote;
+    wire rtr_remote, extended_remote, bus_idle_remote, FORM_ERROR_remote, OVERLOAD_ERROR_remote, fire_an_ack_remote, msg_fresh_remote;
+    message_reciever remote_reciever (.updated_sample(updated_sample), .msg_exists(1'b0), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_remote), .rtr(rtr_remote), .extended(extended_remote), .msg(msg_remote), .bus_idle(bus_idle_remote), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_remote), .OVERLOAD_ERROR(OVERLOAD_ERROR_remote), .fire_an_ack(fire_an_ack_remote), .msg_fresh(msg_fresh_remote), .msg_bytes(num_bytes_remote), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
 
     integer i;
 
@@ -26,6 +111,8 @@ module send_tb;
         $dumpfile("can.lx2");
         $dumpvars(0, sender);
         $dumpvars(0, reciever);
+        $dumpvars(0, remote_reciever);
+
 
         // Init
         stuff_error <= 0;
@@ -56,16 +143,43 @@ module send_tb;
         updated_sample <= 0;
         #1;
 
-        for (i = 0; i < 280; i = i + 1) begin
-            rx <= tx;
+        for (i = 0; i < 140; i = i + 1) begin
+            rx <= tx | fire_an_ack_remote;
             updated_sample <= 1;
             #1;
             updated_sample <= 0;
             #1;
         end
 
+        msg_id[17:0] <= 18'b011001100110011001; // ID
 
+        extended <= 1;
+        rtr <= 0;
 
+        num_bytes <= 5;
+        msg[63:30] <= 0;
+        msg[39:0] <= 40'h0BADC0FFEE ^ 40'hEEFF0CDAB0;
+
+        msg_exists <= 1;
+        #1;
+        rx <= 0;
+        updated_sample <= 1;
+        #1;
+        updated_sample <= 0;
+        #1;
+        rx <= 1; // SOF
+        updated_sample <= 1;
+        #1;
+        updated_sample <= 0;
+        #1;
+
+        for (i = 0; i < 140; i = i + 1) begin
+            rx <= tx | fire_an_ack_remote;
+            updated_sample <= 1;
+            #1;
+            updated_sample <= 0;
+            #1;
+        end
 
     end
 endmodule
