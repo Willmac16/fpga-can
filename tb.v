@@ -4,83 +4,83 @@
 
 `timescale 10 ns / 10 ns
 
-module stuffed_transciever_tb;
-    wire can_bus;
+// module stuffed_transciever_tb;
+//     wire can_bus;
 
-    // Global Clock
-    reg clk;
+//     // Global Clock
+//     reg clk;
 
-    // Transciever inputs
-    reg [63:0] tx_msg;
-    reg [28:0] tx_msg_id;
-    reg [3:0] tx_msg_bytes;
-    reg tx_rtr, tx_extended, tx_msg_exists;
+//     // Transciever inputs
+//     reg [63:0] tx_msg;
+//     reg [28:0] tx_msg_id;
+//     reg [3:0] tx_msg_bytes;
+//     reg tx_rtr, tx_extended, tx_msg_exists;
 
-    wire txcr_tx, rcr_tx;
-    wire clean_send;
+//     wire txcr_tx, rcr_tx;
+//     wire clean_send;
 
-    can_transciever txcr (.rx_raw(can_bus), .tx_raw(txcr_tx), .clk(clk), .tx_msg(tx_msg), .tx_msg_id(tx_msg_id), .tx_msg_bytes(tx_msg_bytes), .tx_rtr(tx_rtr), .tx_extended(tx_extended), .tx_msg_exists(tx_msg_exists), .clean_send(clean_send));
-    can_reciever rcr (.rx_raw(can_bus), .tx_raw(rcr_tx), .clk(clk));
+//     can_transciever txcr (.rx_raw(can_bus), .tx_raw(txcr_tx), .clk(clk), .tx_msg(tx_msg), .tx_msg_id(tx_msg_id), .tx_msg_bytes(tx_msg_bytes), .tx_rtr(tx_rtr), .tx_extended(tx_extended), .tx_msg_exists(tx_msg_exists), .clean_send(clean_send));
+//     can_reciever rcr (.rx_raw(can_bus), .tx_raw(rcr_tx), .clk(clk));
 
-    assign can_bus = txcr_tx | rcr_tx;
+//     assign can_bus = txcr_tx | rcr_tx;
 
-    integer i = 0;
+//     integer i = 0;
 
-    always @(posedge clean_send) begin
-        $display("TX: %b %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, txcr_tx, clean_send);
-
-
-        tx_msg_exists <= 1;
-        tx_msg_id <= (tx_msg_id << 1) ^ 29'b10000000101010010010110100110;
-        tx_msg_bytes <= 8;
-        tx_rtr <= ~tx_rtr;
-        tx_extended <= 1;
-        tx_msg <= (tx_msg << 1) ^ 64'hDEADBEEFDEADBEEF;
-    end
-
-    initial begin
-        $dumpfile("can.lx2");
-        $dumpvars(0, txcr);
-        $dumpvars(0, rcr);
-        $dumpvars(0, clk);
-        $dumpvars(0, can_bus);
-
-        // Init the TXCR with nothing
-        tx_msg_exists <= 0;
-        tx_msg_id <= 0;
-        tx_msg_bytes <= 0;
-        tx_rtr <= 0;
-        tx_extended <= 0;
-        tx_msg <= 0;
-
-        clk <= 0;
-
-        #1;
-
-        // Idle the bus
-        for (i = 0; i < 5000; i = i + 1) begin
-            clk <= ~clk;
-            #1;
-        end
-
-        // Create a message
-        tx_msg_exists <= 1;
-        tx_msg_id <= {11'b01100110011, 18'b0};
-        tx_msg_bytes <= 5;
-        tx_rtr <= 0;
-        tx_extended <= 0;
-        tx_msg <= {24'd0, 40'h0BADC0FFEE};
-
-        // Send the message
-        for (i = 0; i < 1000000; i = i + 1) begin
-            clk <= ~clk;
-            #1;
-        end
-
-    end
+//     always @(posedge clean_send) begin
+//         $display("TX: %b %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, txcr_tx, clean_send);
 
 
-endmodule
+//         tx_msg_exists <= 1;
+//         tx_msg_id <= (tx_msg_id << 1) ^ 29'b10000000101010010010110100110;
+//         tx_msg_bytes <= 8;
+//         tx_rtr <= ~tx_rtr;
+//         tx_extended <= 1;
+//         tx_msg <= (tx_msg << 1) ^ 64'hDEADBEEFDEADBEEF;
+//     end
+
+//     initial begin
+//         $dumpfile("can.lx2");
+//         $dumpvars(0, txcr);
+//         $dumpvars(0, rcr);
+//         $dumpvars(0, clk);
+//         $dumpvars(0, can_bus);
+
+//         // Init the TXCR with nothing
+//         tx_msg_exists <= 0;
+//         tx_msg_id <= 0;
+//         tx_msg_bytes <= 0;
+//         tx_rtr <= 0;
+//         tx_extended <= 0;
+//         tx_msg <= 0;
+
+//         clk <= 0;
+
+//         #1;
+
+//         // Idle the bus
+//         for (i = 0; i < 5000; i = i + 1) begin
+//             clk <= ~clk;
+//             #1;
+//         end
+
+//         // Create a message
+//         tx_msg_exists <= 1;
+//         tx_msg_id <= {11'b01100110011, 18'b0};
+//         tx_msg_bytes <= 5;
+//         tx_rtr <= 0;
+//         tx_extended <= 0;
+//         tx_msg <= {24'd0, 40'h0BADC0FFEE};
+
+//         // Send the message
+//         for (i = 0; i < 1000000; i = i + 1) begin
+//             clk <= ~clk;
+//             #1;
+//         end
+
+//     end
+
+
+// endmodule
 
 module send_tb;
     reg msg_exists, rtr, extended;
@@ -431,6 +431,8 @@ module crc_tb;
     wire [14:0] crc;
     reg [63:0] test_stream;
 
+    reg clk;
+
     integer i;
 
     crc_step_machine crcsm (.next_bit(next_bit), .clear_crc(clear_crc), .update_crc(update_crc), .crc(crc));
@@ -441,8 +443,14 @@ module crc_tb;
 
         // Init
         clear_crc <= 1;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
         #1;
         clear_crc <= 0;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
         #1;
 
         // Test Stream
@@ -450,8 +458,14 @@ module crc_tb;
         for (i = 63; i >= 0; i = i - 1) begin
             next_bit <= test_stream[i];
             update_crc <= 1;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
             update_crc <= 0;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
         end
 
@@ -468,10 +482,12 @@ module txp_tb;
     reg [23:0] txp_test_stream;
     reg [23:0] txp_out_stream;
 
+    reg clk;
+
     integer i;
 
-    tx_pipeline txp (.tx(tx), .updated_sample(updated_sample), .next_bit(next_bit), .bit_advance(bit_advance), .stuff_bypass(stuff_bypass));
-    rx_pipeline rxp (.rx(rx), .updated_sample(rx_updated_sample), .updated_bit(doorbell), .next_bit(out_bit), .stuff_error(stuff_error), .stuff_bypass(stuff_bypass));
+    tx_pipeline txp (.clk(clk), .tx(tx), .updated_sample(updated_sample), .next_bit(next_bit), .bit_advance(bit_advance), .stuff_bypass(stuff_bypass));
+    rx_pipeline rxp (.clk(clk), .rx(rx), .updated_sample(rx_updated_sample), .updated_bit(doorbell), .next_bit(out_bit), .stuff_error(stuff_error), .stuff_bypass(stuff_bypass));
 
     initial begin
         $dumpfile("can.lx2");
@@ -482,10 +498,17 @@ module txp_tb;
 
         // Init
         stuff_bypass <= 1;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
         #1
         stuff_bypass <= 0;
         updated_sample <= 0;
         rx_updated_sample <= 0;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
+
         #1;
 
         // Stream without the need for stuff
@@ -494,12 +517,18 @@ module txp_tb;
         while (i >= 0) begin
             next_bit <= txp_test_stream[i];
             updated_sample <= 1;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
             rx <= tx;
             rx_updated_sample <= 1;
             if (bit_advance) begin
                 i = i - 1;
             end
+            clk <= 1;
+            #0.1;
+            clk <= 0;
 
             #1
             if (doorbell) begin
@@ -508,12 +537,21 @@ module txp_tb;
             #1;
             updated_sample <= 0;
             rx_updated_sample <= 0;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
         end
 
         stuff_bypass <= 1;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
         #1;
         stuff_bypass <= 0;
+        clk <= 1;
+        #0.1;
+        clk <= 0;
 
         // Stream with stuffing
         txp_test_stream = 24'b100000000011111111100000;
@@ -522,12 +560,18 @@ module txp_tb;
         while (i >= 0) begin
             next_bit <= txp_test_stream[i];
             updated_sample <= 1;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
             rx <= tx;
             rx_updated_sample <= 1;
             if (bit_advance) begin
                 i = i - 1;
             end
+            clk <= 1;
+            #0.1;
+            clk <= 0;
 
             #1
             if (doorbell) begin
@@ -536,6 +580,9 @@ module txp_tb;
             #1;
             updated_sample <= 0;
             rx_updated_sample <= 0;
+            clk <= 1;
+            #0.1;
+            clk <= 0;
             #1;
         end
     end
@@ -640,7 +687,7 @@ module ssm_tb;
         bus_idle = 0;
     end
 
-    sync_sample_machine ssm (.rx_raw(rx_raw), .clk(clk), .RJW(RJW), .bus_idle(bus_idle), .rx(rx));
+    sync_sample_machine ssm (.rst(1'b0), .rx_raw(rx_raw), .clk(clk), .RJW(RJW), .bus_idle(bus_idle), .rx(rx));
     initial begin
         can_test[123] = 1;
         can_test[122:112] = 11'b1001001001;
@@ -666,9 +713,9 @@ module ssm_tb;
         for (integer i = 123; i > 0; i = i - 1) begin
             rx_raw = can_test[i];
             for (integer i = 0; i < 100; i = i + 1) begin
-                clk = 1;
+                clk <= 1;
                 #0.45;
-                clk = 0;
+                clk <= 0;
                 #0.45;
             end
         end
