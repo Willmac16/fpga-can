@@ -31,7 +31,7 @@ A CAN 2.0B Controller for FPGAs written in Verilog
   * [x] Written
   * [x] Test Benched
 * [ ] Tested and Ready to go on actual hardware
-  * [*] Zero Warnings Synthesis
+  * [x] Zero Warnings Synthesis
   * [ ] Passes Test Benches with Changes
   * [ ] Hardware implementation confirmed by logic analyzer
 * [ ] Configurable Msg Latch
