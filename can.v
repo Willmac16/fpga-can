@@ -1,4 +1,4 @@
-module can_transciever(
+module can_transceiver(
     input rx_raw,
     output tx_raw,
     input clk,
@@ -67,7 +67,7 @@ module can_transciever(
         .stuff_error(stuff_error)
     );
 
-    message_reciever msg_rec(
+    message_receiver msg_rec(
         .clk(clk),
         .rec_tick(ssm_rec),
         .updated_sample(pipe_update),
@@ -138,7 +138,7 @@ module can_transciever(
     );
 endmodule
 
-module can_reciever(
+module can_receiver(
     input rx_raw,
     output tx_raw,
     input clk,
@@ -187,7 +187,7 @@ module can_reciever(
         .stuff_error(stuff_error)
     );
 
-    message_reciever msg_rec(
+    message_receiver msg_rec(
         .clk(clk),
         .rec_tick(ssm_rec),
         .updated_sample(pipe_update),
@@ -213,7 +213,7 @@ module can_reciever(
         .tx_msg_exists(1'b0),
         .fire_an_ack(fire_an_ack),
         .fire_an_error(1'b0),
-        .pipeline_val(1'b0),
+        .pipeline_val(1'b1),
         .sync_tick(ssm_sync),
         .tx_line(tx_raw)
     );
@@ -401,7 +401,7 @@ module tx_pipeline(
 
     always @(posedge clk) begin
         if (running_start[0]) begin
-            stuff_history <= {running_start[1], 4'b1000};
+            stuff_history <= {running_start[1], 4'b0111};
             history_valid <= 5'b11000;
 
             tx <= running_start[1];
@@ -469,7 +469,7 @@ module send_machine(
     output reg tx_line
 );
     always @(posedge sync_tick) begin
-        tx_line <= fire_an_error | (fire_an_ack & !bus_idle) | (bus_idle & tx_msg_exists) | pipeline_val;
+        tx_line <= !fire_an_error & (!fire_an_ack | bus_idle) & (!bus_idle | !tx_msg_exists) & pipeline_val;
     end
 endmodule
 
@@ -485,7 +485,7 @@ module bit_error_machine(
 endmodule
 
 // State Machine Updated once per bit
-module message_reciever(
+module message_receiver(
     input clk,
     input rec_tick,
     input updated_sample,
@@ -512,7 +512,7 @@ module message_reciever(
     reg update_crc = 0, clear_crc = 1;
     reg [5:0] state = 0;
 
-    reg [3:0] DLC;
+    reg [3:0] DLC = 0;
     reg [5:0] bit_counter;
 
     reg throw_after_ack;
@@ -528,7 +528,7 @@ module message_reciever(
         else if (rec_tick && updated_sample) begin
             case (state)
                 0: begin // Idle / SOF
-                    if (rx) begin
+                    if (~rx) begin
                         state <= 1;
                         bus_idle <= 0;
                         msg_id <= 0;
@@ -632,10 +632,10 @@ module message_reciever(
                     transmission_error <= transmission_error | bit_error;
                 end
                 12: begin // CRC Delim
-                    state <= rx ? 31 : 13;
+                    state <= ~rx ? 31 : 13;
 
-                    FORM_ERROR <= rx;
-                    transmission_error <= rx;
+                    FORM_ERROR <= ~rx;
+                    transmission_error <= transmission_error | ~rx;
                     // Arm the ACK
                     fire_an_ack <= (crc_recieved == crc_computed) && (!msg_exists || transmission_error);
                     throw_after_ack <= crc_recieved != crc_computed;
@@ -643,16 +643,16 @@ module message_reciever(
                 13: begin // ACK Slot
                     fire_an_ack <= 0;
 
-                    state <= rx ? 14 : 31;
+                    state <= ~rx ? 14 : 31;
 
-                    FORM_ERROR <= !rx;
-                    transmission_error <= !rx;
+                    FORM_ERROR <= rx;
+                    transmission_error <= transmission_error | rx;
                 end
                 14: begin // ACK Delim
-                    state <= (rx | throw_after_ack) ? 31 : 15;
+                    state <= (~rx | throw_after_ack) ? 31 : 15;
 
-                    FORM_ERROR <= rx | throw_after_ack;
-                    transmission_error <= rx;
+                    FORM_ERROR <= ~rx | throw_after_ack;
+                    transmission_error <= transmission_error | ~rx;
                 end
                 15, // EOF 1
                 16, // EOF 2
@@ -661,13 +661,13 @@ module message_reciever(
                 19, // EOF 5
                 20: // EOF 6
                 begin
-                    state <= rx ? 31: state + 1;
+                    state <= ~rx ? 31: state + 1;
 
                     clear_crc <= 1;
 
-                    FORM_ERROR <= rx;
+                    FORM_ERROR <= ~rx;
 
-                    msg_fresh <= !rx & state == 20; // Only set msg_fresh if we are in the last EOF
+                    msg_fresh <= rx & state == 20; // Only set msg_fresh if we are in the last EOF
                 end
                 21: // EOF 7
                 begin
@@ -677,13 +677,13 @@ module message_reciever(
                 22, // Intermission 1
                 23: // Intermission 2
                 begin
-                    state <= rx ? 30: state + 1;
+                    state <= ~rx ? 30: state + 1;
 
-                    OVERLOAD_ERROR <= rx;
+                    OVERLOAD_ERROR <= ~rx;
                 end
                 24: begin // Intermission 3
                     // Crystal Oscillator Tollerancing Change from 2.0 spec
-                    if (rx) begin
+                    if (~rx) begin
                         state <= 1;
                         bus_idle <= 0;
                         msg_id <= 0;
@@ -748,7 +748,7 @@ module message_sender(
     input msg_exists,
     input running_start,
     output reg stuff_bypass = 1,
-    output reg tx = 0,
+    output reg tx = 1,
     output reg clean_send = 0,
     output [1:0] txp_running_start
 );
@@ -775,6 +775,7 @@ module message_sender(
         if (restart) begin
             state <= 0;
             clear_crc <= 1;
+            stuff_bypass <= 1;
         end else if (sender_tick) begin
             if (running_start) begin
                 state <= 1;
@@ -793,7 +794,7 @@ module message_sender(
                 end else if (bit_advance) begin // Holding restart high will freeze the state machine
                     case (state) // These nums do not match the state machine in the receiver
                         0: begin // Start of Frame // This never actually gets called
-                            tx = 1;
+                            tx = 0;
                             state <= 1;
                             id_bit <= 28;
                             stuff_bypass <= 0;
@@ -830,7 +831,7 @@ module message_sender(
                             update_crc <= 1;
                         end
                         5: begin // R1
-                            tx = 1;
+                            tx = 0;
                             state <= 6; // R0
 
                             update_crc <= 1;
@@ -878,17 +879,17 @@ module message_sender(
                             state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
                         end
                         13: begin // CRC Delim
-                            tx <= 0;
+                            tx <= 1;
                             state <= 14;
 
                             stuff_bypass <= 1;
                         end
                         14: begin // ACK Slot
-                            tx <= 0;
+                            tx <= 1;
                             state <= 15;
                         end
                         15: begin // ACK Delim
-                            tx <= 0;
+                            tx <= 1;
                             state <= 16;
                         end
                         16, // EOF 1
@@ -901,11 +902,11 @@ module message_sender(
                         23, // Intermission 1
                         24: begin // Intermission 2
                             clean_send <= state == 24;
-                            tx <= 0;
+                            tx <= 1;
                             state <= state + 1;
                         end
                         25: begin // Intermission 3
-                            tx <= 0;
+                            tx <= 1;
                         end
                     endcase
                 end
@@ -934,9 +935,9 @@ module crc_step_machine (
         if (clear_crc)
             crc_reg <= 0;
         else if (running_start[0]) begin
-            crc_reg = {15'h4599, 1'b0};
+            crc_reg = 16'd0;
 
-            if (running_start[1] ^ crc_reg[15])
+            if (running_start[1])
                 crc_reg[14:0] = crc_reg[14:0] ^ 15'h4599;
 
             crc_reg = {crc_reg[14:0], 1'b0};

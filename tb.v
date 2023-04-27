@@ -4,7 +4,7 @@
 
 `timescale 10 ns / 10 ns
 
-module stuffed_transciever_tb;
+module stuffed_transceiver_tb;
     wire can_bus;
 
     // Global Clock
@@ -16,18 +16,26 @@ module stuffed_transciever_tb;
     reg [3:0] tx_msg_bytes;
     reg tx_rtr, tx_extended, tx_msg_exists;
 
-    wire txcr_tx, rcr_tx;
-    wire clean_send;
+    wire txcr_tx, rcr_tx, txcr_tx_two;
+    wire clean_send, clean_send_two;
 
-    can_transciever txcr (.rx_raw(can_bus), .tx_raw(txcr_tx), .clk(clk), .tx_msg(tx_msg), .tx_msg_id(tx_msg_id), .tx_msg_bytes(tx_msg_bytes), .tx_rtr(tx_rtr), .tx_extended(tx_extended), .tx_msg_exists(tx_msg_exists), .clean_send(clean_send));
-    can_reciever rcr (.rx_raw(can_bus), .tx_raw(rcr_tx), .clk(clk));
+    // Transciever two inputs
+    reg [63:0] tx_msg_two;
+    reg [28:0] tx_msg_id_two;
+    reg [3:0] tx_msg_bytes_two;
+    reg tx_rtr_two, tx_extended_two, tx_msg_exists_two;
 
-    assign can_bus = txcr_tx | rcr_tx;
+
+    can_transceiver txcr (.rx_raw(can_bus), .tx_raw(txcr_tx), .clk(clk), .tx_msg(tx_msg), .tx_msg_id(tx_msg_id), .tx_msg_bytes(tx_msg_bytes), .tx_rtr(tx_rtr), .tx_extended(tx_extended), .tx_msg_exists(tx_msg_exists), .clean_send(clean_send));
+    can_transceiver txcr_two (.rx_raw(can_bus), .tx_raw(txcr_tx_two), .clk(clk), .tx_msg(tx_msg_two), .tx_msg_id(tx_msg_id_two), .tx_msg_bytes(tx_msg_bytes_two), .tx_rtr(tx_rtr_two), .tx_extended(tx_extended_two), .tx_msg_exists(tx_msg_exists_two), .clean_send(clean_send_two));
+    can_receiver rcr (.rx_raw(can_bus), .tx_raw(rcr_tx), .clk(clk));
+
+    assign can_bus = txcr_tx & rcr_tx & txcr_tx_two;
 
     integer i = 0;
 
     always @(posedge clean_send) begin
-        $display("TX: %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, clean_send);
+        $display("TX1: %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, clean_send);
 
 
         tx_msg_exists <= 1;
@@ -37,6 +45,30 @@ module stuffed_transciever_tb;
         tx_extended <= ~tx_extended ^ tx_rtr;
         tx_msg <= {tx_msg[62:0], 1'b0} ^ (tx_msg[63] * 64'h033E7BDF0CC025A5);
         tx_msg_bytes <= tx_msg_bytes + 1;
+
+        tx_msg_id_two <= tx_msg_id_two - 100;
+
+
+        clk <= ~clk;
+        #1;
+        clk <= ~clk;
+        #1;
+    end
+
+    always @(posedge clean_send_two) begin
+        $display("TX2: %b %b %b %b %b %b %b", tx_msg_exists_two, tx_msg_id_two, tx_msg_bytes_two, tx_rtr_two, tx_extended_two, tx_msg_two, clean_send_two);
+
+
+        tx_msg_exists_two <= 1;
+        tx_msg_id_two <= {tx_msg_id_two[78:0], 1'b0} ^ (tx_msg_id_two[28] * 29'b10000000101010010010110100110);
+        tx_msg_bytes_two <= 8;
+        tx_rtr_two <= ~tx_rtr_two;
+        tx_extended_two <= ~tx_extended_two ^ tx_rtr_two;
+        tx_msg_two <= {tx_msg_two[62:0], 1'b0} ^ (tx_msg_two[63] * 64'h033E7BDF0CC025A5);
+        tx_msg_bytes_two <= tx_msg_bytes_two + 1;
+
+        tx_msg_id <= tx_msg_id - 100;
+
         clk <= ~clk;
         #1;
         clk <= ~clk;
@@ -46,6 +78,7 @@ module stuffed_transciever_tb;
     initial begin
         $dumpfile("can.lx2");
         $dumpvars(0, txcr);
+        $dumpvars(0, txcr_two);
         $dumpvars(0, rcr);
         $dumpvars(0, clk);
         $dumpvars(0, can_bus);
@@ -58,6 +91,13 @@ module stuffed_transciever_tb;
         tx_extended <= 0;
         tx_msg <= 0;
 
+        tx_msg_exists_two <= 0;
+        tx_msg_id_two <= 0;
+        tx_msg_bytes_two <= 0;
+        tx_rtr_two <= 0;
+        tx_extended_two <= 0;
+        tx_msg_two <= 0;
+
         clk <= 1;
         #1;
         clk <= 0;
@@ -69,23 +109,13 @@ module stuffed_transciever_tb;
             #1;
         end
 
-        // Create a message
-        // tx_msg_exists <= 1;
-        // tx_msg_id <= {11'b01100110011, 18'b0};
-        // tx_msg_bytes <= 5;
-        // tx_rtr <= 0;
-        // tx_extended <= 0;
-        // tx_msg <= {24'd0, 40'h0BADC0FFEE};
+        tx_msg_exists_two <= 1;
+        tx_msg_id_two <= {11'b01100110011, 18'b0};
+        tx_msg_bytes_two <= 5;
+        tx_rtr_two <= 0;
+        tx_extended_two <= 0;
+        tx_msg_two <= {24'd0, 40'h0BADC0FFEE};
 
-        // The formerly lethal payload
-        // tx_msg_exists <= 1;
-        // tx_msg_id <= 29'h1E3AC362;
-        // tx_msg_bytes <= 8;
-        // tx_rtr <= 0;
-        // tx_extended <= 1;
-        // tx_msg <= 64'h033E7BDF0CC025A5;
-
-        // Current NON? Lethal Payload
         tx_msg_exists <= 1;
         tx_msg_id <= 29'h180CE362;
         tx_msg_bytes <= 8;
@@ -96,7 +126,7 @@ module stuffed_transciever_tb;
 
 
         // Send the message
-        for (i = 0; i < 10000000; i = i + 1) begin
+        for (i = 0; i < 100000000; i = i + 1) begin
             clk <= ~clk;
             #1;
         end
@@ -122,22 +152,22 @@ endmodule
 //     wire [3:0] num_bytes_out;
 //     wire rtr_out, extended_out, bus_idle_out, FORM_ERROR_out, OVERLOAD_ERROR_out, fire_an_ack_out, msg_fresh_out;
 //     message_sender sender (.clk(clk), .bit_advance(updated_sample), .msg_id(msg_id), .extended(extended), .rtr(rtr), .msg(msg), .msg_exists(msg_exists), .tx(tx), .stuff_bypass(stuff_bypass), .num_bytes(num_bytes), .running_start(running_start), .restart(transmission_error));
-//     message_reciever reciever (.clk(clk), .updated_sample(updated_sample), .msg_exists(1'b1), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_out), .rtr(rtr_out), .extended(extended_out), .msg(msg_out), .bus_idle(bus_idle_out), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_out), .OVERLOAD_ERROR(OVERLOAD_ERROR_out), .fire_an_ack(fire_an_ack_out), .msg_fresh(msg_fresh_out), .msg_bytes(num_bytes_out), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
+//     message_receiver receiver (.clk(clk), .updated_sample(updated_sample), .msg_exists(1'b1), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_out), .rtr(rtr_out), .extended(extended_out), .msg(msg_out), .bus_idle(bus_idle_out), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_out), .OVERLOAD_ERROR(OVERLOAD_ERROR_out), .fire_an_ack(fire_an_ack_out), .msg_fresh(msg_fresh_out), .msg_bytes(num_bytes_out), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
 
 
 //     wire [63:0] msg_remote;
 //     wire [28:0] msg_id_remote;
 //     wire [3:0] num_bytes_remote;
 //     wire rtr_remote, extended_remote, bus_idle_remote, FORM_ERROR_remote, OVERLOAD_ERROR_remote, fire_an_ack_remote, msg_fresh_remote;
-//     message_reciever remote_reciever (.clk(clk), .updated_sample(updated_sample), .msg_exists(1'b0), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_remote), .rtr(rtr_remote), .extended(extended_remote), .msg(msg_remote), .bus_idle(bus_idle_remote), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_remote), .OVERLOAD_ERROR(OVERLOAD_ERROR_remote), .fire_an_ack(fire_an_ack_remote), .msg_fresh(msg_fresh_remote), .msg_bytes(num_bytes_remote), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
+//     message_receiver remote_receiver (.clk(clk), .updated_sample(updated_sample), .msg_exists(1'b0), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id_remote), .rtr(rtr_remote), .extended(extended_remote), .msg(msg_remote), .bus_idle(bus_idle_remote), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR_remote), .OVERLOAD_ERROR(OVERLOAD_ERROR_remote), .fire_an_ack(fire_an_ack_remote), .msg_fresh(msg_fresh_remote), .msg_bytes(num_bytes_remote), .running_start(running_start), .transmission_error(transmission_error), .bit_error(1'b0));
 
 //     integer i;
 
 //     initial begin
 //         $dumpfile("can.lx2");
 //         $dumpvars(0, sender);
-//         $dumpvars(0, reciever);
-//         $dumpvars(0, remote_reciever);
+//         $dumpvars(0, receiver);
+//         $dumpvars(0, remote_receiver);
 
 
 //         // Init
@@ -267,7 +297,7 @@ endmodule
 
 //     wire [14:0] crc;
 
-//     message_reciever reciever (.updated_sample(updated_sample), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id), .rtr(rtr), .extended(extended), .msg(msg), .bus_idle(bus_idle), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR), .OVERLOAD_ERROR(OVERLOAD_ERROR), .fire_an_ack(fire_an_ack), .msg_fresh(msg_fresh));
+//     message_receiver receiver (.updated_sample(updated_sample), .stuff_error(stuff_error), .rx(rx), .msg_id(msg_id), .rtr(rtr), .extended(extended), .msg(msg), .bus_idle(bus_idle), .stuff_bypass(stuff_bypass), .FORM_ERROR(FORM_ERROR), .OVERLOAD_ERROR(OVERLOAD_ERROR), .fire_an_ack(fire_an_ack), .msg_fresh(msg_fresh));
 //     crc_step_machine crcsm (.next_bit(next_bit), .clear_crc(clear_crc), .update_crc(update_crc), .crc(crc));
 
 //     reg [163:0] test_stream;
@@ -275,7 +305,7 @@ endmodule
 
 //     initial begin
 //         $dumpfile("can.lx2");
-//         $dumpvars(0, reciever);
+//         $dumpvars(0, receiver);
 //         $dumpvars(0, test_stream);
 //         $dumpvars(0, crcsm);
 

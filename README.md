@@ -15,7 +15,7 @@ A CAN 2.0B Controller for FPGAs written in Verilog
 * [x] Tx Pipeline (Bit Stuffer)
   * [x] Written
   * [x] Test Benched
-* [x] CRC Machine (Shared between reciever and sender; updates one bit at a time)
+* [x] CRC Machine (Same for Receiver and Sender)
   * [x] Written
   * [x] Rewritten
   * [x] Test Benched
@@ -32,14 +32,14 @@ A CAN 2.0B Controller for FPGAs written in Verilog
   * [x] Test Benched
 * [ ] Tested and Ready to go on actual hardware
   * [x] Zero Warnings Synthesis
-  * [ ] Passes Test Benches with Changes
+  * [x] Passes Test Benches with Changes
   * [ ] Hardware implementation confirmed by logic analyzer
 * [ ] Configurable Msg Latch
     * [ ] Written
 * [ ] Configurable Msg FIFO
     * [ ] Written
     * [ ] Test Benched
-  
+
 ### More Features I want to finish (to meet the whole spec)
 
 * [ ] Error Counting Machine
