@@ -27,15 +27,16 @@ module stuffed_transciever_tb;
     integer i = 0;
 
     always @(posedge clean_send) begin
-        $display("TX: %b %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, txcr_tx, clean_send);
+        $display("TX: %b %b %b %b %b %b %b", tx_msg_exists, tx_msg_id, tx_msg_bytes, tx_rtr, tx_extended, tx_msg, clean_send);
 
 
         tx_msg_exists <= 1;
-        tx_msg_id <= (tx_msg_id << 1) ^ 29'b10000000101010010010110100110;
+        tx_msg_id <= {tx_msg_id[78:0], 1'b0} ^ (tx_msg_id[28] * 29'b10000000101010010010110100110);
         tx_msg_bytes <= 8;
         tx_rtr <= ~tx_rtr;
-        tx_extended <= 1;
-        tx_msg <= (tx_msg << 1) ^ 64'hDEADBEEFDEADBEEF;
+        tx_extended <= ~tx_extended ^ tx_rtr;
+        tx_msg <= {tx_msg[62:0], 1'b0} ^ (tx_msg[63] * 64'h033E7BDF0CC025A5);
+        tx_msg_bytes <= tx_msg_bytes + 1;
         clk <= ~clk;
         #1;
         clk <= ~clk;
@@ -69,15 +70,33 @@ module stuffed_transciever_tb;
         end
 
         // Create a message
+        // tx_msg_exists <= 1;
+        // tx_msg_id <= {11'b01100110011, 18'b0};
+        // tx_msg_bytes <= 5;
+        // tx_rtr <= 0;
+        // tx_extended <= 0;
+        // tx_msg <= {24'd0, 40'h0BADC0FFEE};
+
+        // The formerly lethal payload
+        // tx_msg_exists <= 1;
+        // tx_msg_id <= 29'h1E3AC362;
+        // tx_msg_bytes <= 8;
+        // tx_rtr <= 0;
+        // tx_extended <= 1;
+        // tx_msg <= 64'h033E7BDF0CC025A5;
+
+        // Current NON? Lethal Payload
         tx_msg_exists <= 1;
-        tx_msg_id <= {11'b01100110011, 18'b0};
-        tx_msg_bytes <= 5;
+        tx_msg_id <= 29'h180CE362;
+        tx_msg_bytes <= 8;
         tx_rtr <= 0;
-        tx_extended <= 0;
-        tx_msg <= {24'd0, 40'h0BADC0FFEE};
+        tx_extended <= 1;
+        tx_msg <= 64'hF1FA040C666495A5;
+
+
 
         // Send the message
-        for (i = 0; i < 1000000; i = i + 1) begin
+        for (i = 0; i < 10000000; i = i + 1) begin
             clk <= ~clk;
             #1;
         end

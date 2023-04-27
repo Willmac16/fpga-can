@@ -21,7 +21,7 @@ module can_transciever(
     reg [6:0] RJW = 5;
 
     // SSM Outs
-    wire ssm_rx, ssm_update, ssm_sync;
+    wire ssm_rx, ssm_update, ssm_sync, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
 
     // Reciever Outs
     wire bus_idle, stuff_bypass, fire_an_ack, running_start;
@@ -50,13 +50,17 @@ module can_transciever(
         .bus_idle(bus_idle),
         .rx(ssm_rx),
         .sync_tick(ssm_sync),
-        .updated_sample(ssm_update)
+        .sample_tick(ssm_update),
+        .rxp_tick(ssm_rxp),
+        .txp_tick(ssm_txp),
+        .rec_tick(ssm_rec),
+        .sender_tick(ssm_sender)
     );
 
     rx_pipeline rx_pipe(
         .clk(clk),
         .rx(ssm_rx),
-        .updated_sample(ssm_update),
+        .updated_sample(ssm_rxp),
         .stuff_bypass(stuff_bypass),
         .updated_bit(pipe_update),
         .next_bit(pipe_rx),
@@ -65,6 +69,7 @@ module can_transciever(
 
     message_reciever msg_rec(
         .clk(clk),
+        .rec_tick(ssm_rec),
         .updated_sample(pipe_update),
         .rx(pipe_rx),
         .stuff_error(stuff_error),
@@ -89,7 +94,7 @@ module can_transciever(
         .clk(clk),
         .next_bit(sender_tx),
         .stuff_bypass(sender_stuff_bypass),
-        .updated_sample(ssm_update),
+        .updated_sample(ssm_txp),
         .running_start(txp_running_start),
         .tx(pipe_tx),
         .bit_advance(pipe_bit_advance)
@@ -97,6 +102,7 @@ module can_transciever(
 
     message_sender msg_send(
         .clk(clk),
+        .sender_tick(ssm_sender),
         .bit_advance(pipe_bit_advance),
         // Message input block
         .msg_id(tx_msg_id),
@@ -147,7 +153,7 @@ module can_reciever(
     reg [6:0] RJW = 5;
 
     // SSM Outs
-    wire ssm_rx, ssm_update, ssm_sync;
+    wire ssm_rx, ssm_update, ssm_sync, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
 
     // Reciever Outs
     wire bus_idle, stuff_bypass, fire_an_ack;
@@ -164,13 +170,17 @@ module can_reciever(
         .bus_idle(bus_idle),
         .rx(ssm_rx),
         .sync_tick(ssm_sync),
-        .updated_sample(ssm_update)
+        .sample_tick(ssm_update),
+        .rxp_tick(ssm_rxp),
+        .txp_tick(ssm_txp),
+        .rec_tick(ssm_rec),
+        .sender_tick(ssm_sender)
     );
 
     rx_pipeline rx_pipe(
         .clk(clk),
         .rx(ssm_rx),
-        .updated_sample(ssm_update),
+        .updated_sample(ssm_rxp),
         .stuff_bypass(stuff_bypass),
         .updated_bit(pipe_update),
         .next_bit(pipe_rx),
@@ -179,6 +189,7 @@ module can_reciever(
 
     message_reciever msg_rec(
         .clk(clk),
+        .rec_tick(ssm_rec),
         .updated_sample(pipe_update),
         .rx(pipe_rx),
         .stuff_error(stuff_error),
@@ -216,7 +227,11 @@ module sync_sample_machine(
     input rst,
     output reg rx,
     output reg sync_tick,
-    output reg updated_sample
+    output reg sample_tick,
+    output reg rxp_tick,
+    output reg rec_tick,
+    output reg sender_tick,
+    output reg txp_tick
 );
 
     reg [8:0] current_quantum = 0;
@@ -239,12 +254,26 @@ module sync_sample_machine(
             current_quantum = 0;
         end else if (clk) begin
             if (last_rx_raw ^ rx_raw) begin
-                if (bus_idle)
+                if (bus_idle) begin
                     current_quantum <= 0; // Hard Sync
-                else begin
-                    if (current_quantum < RJW)
+                    sync_tick <= 1;
+                    // set all the other ticks to 0
+                    sample_tick <= 0;
+                    rxp_tick <= 0;
+                    rec_tick <= 0;
+                    sender_tick <= 0;
+                    txp_tick <= 0;
+                end else begin
+                    if (current_quantum < RJW) begin
                         current_quantum <= 0; // Resync Smaller than Jump width
-                    else if (cycle_length - current_quantum < RJW)
+                        sync_tick <= 1;
+                        // set all the other ticks to 0
+                        sample_tick <= 0;
+                        rxp_tick <= 0;
+                        rec_tick <= 0;
+                        sender_tick <= 0;
+                        txp_tick <= 0;
+                    end else if (cycle_length - current_quantum < RJW)
                         current_quantum <= 0; // Resync Smaller than Jump width
                     else if (current_quantum > 1 + prop_seg + phase_seg_one)
                         phase_seg_one <= phase_seg_two - RJW; // Positive Phase error correction
@@ -256,16 +285,41 @@ module sync_sample_machine(
             if (current_quantum >= cycle_length) begin
                 current_quantum <= 0;
                 sync_tick <= 1;
+                // set all the other ticks to 0
+                sample_tick <= 0;
+                rxp_tick <= 0;
+                rec_tick <= 0;
+                sender_tick <= 0;
+                txp_tick <= 0;
             end else begin
                 current_quantum <= current_quantum + 1;
                 sync_tick <= 0;
-            end
 
-            if (current_quantum == (1 + prop_seg + phase_seg_one)) begin
-                rx <= rx_raw;
-                updated_sample <= 1;
-            end else
-                updated_sample <= 0;
+                case (current_quantum - (prop_seg + phase_seg_one))
+                    1: begin
+                        rx <= rx_raw;
+                        sample_tick <= 1;
+                    end
+                    2: begin
+                        rxp_tick <= 1;
+                        sample_tick <= 0;
+                    end
+                    3: begin
+                        rec_tick <= 1;
+                        rxp_tick <= 0;
+                    end
+                    4: begin
+                        sender_tick <= 1;
+                        rec_tick <= 0;
+                    end
+                    5: begin
+                        txp_tick <= 1;
+                        sender_tick <= 0;
+                    end
+                    6:
+                        txp_tick <= 0;
+                endcase
+            end
 
             last_rx_raw <= rx_raw;
         end
@@ -291,8 +345,8 @@ module rx_pipeline(
                 next_bit = rx;
                 updated_bit <= 1;
 
-                stuff_history <= 0;
-                history_valid <= 0;
+                stuff_history[5] <= rx;
+                history_valid <= 6'b100000;
                 stuff_error <= 0;
             end else begin
                 // These Shifts need to be blocking so the later logic works
@@ -300,13 +354,16 @@ module rx_pipeline(
                 history_valid = {1'b1, history_valid[5:1]};
 
                 if (history_valid == 6'b111111) begin
-                    if (stuff_history == 6'b111111)
+                    if (stuff_history == 6'b111111) begin
                         stuff_error <= 1;
-                    else if (stuff_history == 6'b000000)
+                        updated_bit <= 0;
+                    end else if (stuff_history == 6'b000000) begin
                         stuff_error <= 1;
-                    else begin
+                        updated_bit <= 0;
+                    end else begin
                         if (stuff_history[4:0] == 5'b11111 || stuff_history[4:0] == 5'b00000) begin
                             // Next bit is stuffed: dont return anything
+                            updated_bit <= 0;
                         end else begin
                             // Next bit isn't stuffed: return the bit
                             next_bit = stuff_history[5];
@@ -319,8 +376,7 @@ module rx_pipeline(
                     updated_bit <= 1;
                 end
             end
-        end else
-            updated_bit <= 0;
+        end
     end
 endmodule
 
@@ -379,8 +435,6 @@ module tx_pipeline(
                     end
                 end
             end
-        end else begin
-            bit_advance <= 0;
         end
     end
 endmodule
@@ -433,6 +487,7 @@ endmodule
 // State Machine Updated once per bit
 module message_reciever(
     input clk,
+    input rec_tick,
     input updated_sample,
     input rx,
     input stuff_error,
@@ -452,7 +507,7 @@ module message_reciever(
     output reg running_start = 0,
     output reg transmission_error = 0
 );
-    reg [14:0] crc_recieved;
+    reg [14:0] crc_recieved = 0;
     wire [14:0] crc_computed;
     reg update_crc = 0, clear_crc = 1;
     reg [5:0] state = 0;
@@ -470,7 +525,7 @@ module message_reciever(
     always @(posedge clk) begin
         if (stuff_error)
             state <= 31;
-        else if (updated_sample) begin
+        else if (rec_tick && updated_sample) begin
             case (state)
                 0: begin // Idle / SOF
                     if (rx) begin
@@ -491,6 +546,8 @@ module message_reciever(
                     end
                 end
                 1: begin // Base ID
+
+                    running_start <= 0;
 
                     update_crc <= 1;
 
@@ -674,13 +731,13 @@ module message_reciever(
             endcase
         end else begin
             update_crc <= 0;
-            running_start <= 0;
         end
     end
 endmodule
 
 module message_sender(
     input clk,
+    input sender_tick,
     input bit_advance,
     input [28:0] msg_id,
     input extended,
@@ -718,143 +775,145 @@ module message_sender(
         if (restart) begin
             state <= 0;
             clear_crc <= 1;
-        end else if (running_start) begin
-            state <= 1;
-            id_bit <= 26;
-            stuff_bypass <= 0;
+        end else if (sender_tick) begin
+            if (running_start) begin
+                state <= 1;
+                id_bit <= 26;
+                stuff_bypass <= 0;
 
-            // Fire up the CRC and Pipeline
-            tx = msg_id[27];
-            crc_rs <= {msg_id[28], 1'b1};
-        end else begin
-            crc_rs <= 0;
-
-            if (!msg_exists) begin
-                state <= 0;
-                clear_crc <= 1;
-            end else if (bit_advance) begin // Holding restart high will freeze the state machine
-                case (state) // These nums do not match the state machine in the receiver
-                    0: begin // Start of Frame // This never actually gets called
-                        tx = 1;
-                        state <= 1;
-                        id_bit <= 28;
-                        stuff_bypass <= 0;
-
-                        update_crc <= 1;
-                    end
-                    1: begin // ID
-                        tx = msg_id[id_bit];
-                        id_bit <= id_bit - 1;
-
-                        if (id_bit == 18)
-                            state <= extended ? 2 : 3; // SRR or RTR
-                        else if (id_bit == 0)
-                            state <= 3; // RTR
-
-                        update_crc <= 1;
-                    end
-                    2: begin // SRR
-                        tx = 0;
-                        state <= 4; // IDE
-
-                        update_crc <= 1;
-                    end
-                    3: begin // RTR
-                        tx = ~rtr;
-                        state <= extended ? 5 : 4; // R1 or IDE
-
-                        update_crc <= 1;
-                    end
-                    4: begin // IDE
-                        tx = !extended;
-                        state <= extended ? 1 : 6; // ID or R1
-
-                        update_crc <= 1;
-                    end
-                    5: begin // R1
-                        tx = 1;
-                        state <= 6; // R0
-
-                        update_crc <= 1;
-                    end
-                    6: begin // R0
-                        tx = 0;
-                        state <= 7; // DLC 3
-
-                        update_crc <= 1;
-                    end
-                    7, // DLC 3
-                    8, // DLC 2
-                    9: begin // DLC 1
-                        tx = ~DLC[10 - state];
-                        state <= state + 1;
-
-                        update_crc <= 1;
-                    end
-                    10: begin // DLC 0
-                        tx = ~DLC[0];
-                        state <= (DLC == 0) ? 12 : 11; // CRC or Data
-
-                        if (DLC != 0) begin
-                            bit_counter[5:3] <= DLC - 1;
-                            bit_counter[2:0] <= 3'b111;
-                        end
-
-                        crc_bit <= 14;
-
-                        update_crc <= 1;
-                    end
-                    11: begin // Data
-                        bit_counter <= bit_counter - 1;
-
-                        tx = msg[bit_counter];
-
-                        state <= bit_counter == 0 ? 12 : 11; // CRC or More Data
-
-                        update_crc <= 1;
-                    end
-                    12: begin // CRC
-                        tx <= crc_computed[crc_bit];
-                        crc_bit <= crc_bit - 1;
-
-                        state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
-                    end
-                    13: begin // CRC Delim
-                        tx <= 0;
-                        state <= 14;
-
-                        stuff_bypass <= 1;
-                    end
-                    14: begin // ACK Slot
-                        tx <= 0;
-                        state <= 15;
-                    end
-                    15: begin // ACK Delim
-                        tx <= 0;
-                        state <= 16;
-                    end
-                    16, // EOF 1
-                    17, // EOF 2
-                    18, // EOF 3
-                    19, // EOF 4
-                    20, // EOF 5
-                    21, // EOF 6
-                    22, // EOF 7
-                    23, // Intermission 1
-                    24: begin // Intermission 2
-                        clean_send <= state == 24;
-                        tx <= 0;
-                        state <= state + 1;
-                    end
-                    25: begin // Intermission 3
-                        tx <= 0;
-                    end
-                endcase
+                // Fire up the CRC and Pipeline
+                tx = msg_id[27];
+                crc_rs <= {msg_id[28], 1'b1};
             end else begin
-                update_crc <= 0;
-                clear_crc <= 0;
-                clean_send <= 0;
+                crc_rs <= 0;
+
+                if (!msg_exists) begin
+                    state <= 0;
+                    clear_crc <= 1;
+                end else if (bit_advance) begin // Holding restart high will freeze the state machine
+                    case (state) // These nums do not match the state machine in the receiver
+                        0: begin // Start of Frame // This never actually gets called
+                            tx = 1;
+                            state <= 1;
+                            id_bit <= 28;
+                            stuff_bypass <= 0;
+
+                            update_crc <= 1;
+                        end
+                        1: begin // ID
+                            tx = msg_id[id_bit];
+                            id_bit <= id_bit - 1;
+
+                            if (id_bit == 18)
+                                state <= extended ? 2 : 3; // SRR or RTR
+                            else if (id_bit == 0)
+                                state <= 3; // RTR
+
+                            update_crc <= 1;
+                        end
+                        2: begin // SRR
+                            tx = 0;
+                            state <= 4; // IDE
+
+                            update_crc <= 1;
+                        end
+                        3: begin // RTR
+                            tx = ~rtr;
+                            state <= extended ? 5 : 4; // R1 or IDE
+
+                            update_crc <= 1;
+                        end
+                        4: begin // IDE
+                            tx = !extended;
+                            state <= extended ? 1 : 6; // ID or R1
+
+                            update_crc <= 1;
+                        end
+                        5: begin // R1
+                            tx = 1;
+                            state <= 6; // R0
+
+                            update_crc <= 1;
+                        end
+                        6: begin // R0
+                            tx = 0;
+                            state <= 7; // DLC 3
+
+                            update_crc <= 1;
+                        end
+                        7, // DLC 3
+                        8, // DLC 2
+                        9: begin // DLC 1
+                            tx = ~DLC[10 - state];
+                            state <= state + 1;
+
+                            update_crc <= 1;
+                        end
+                        10: begin // DLC 0
+                            tx = ~DLC[0];
+                            state <= (DLC == 0) ? 12 : 11; // CRC or Data
+
+                            if (DLC != 0) begin
+                                bit_counter[5:3] <= DLC - 1;
+                                bit_counter[2:0] <= 3'b111;
+                            end
+
+                            crc_bit <= 14;
+
+                            update_crc <= 1;
+                        end
+                        11: begin // Data
+                            bit_counter <= bit_counter - 1;
+
+                            tx = msg[bit_counter];
+
+                            state <= bit_counter == 0 ? 12 : 11; // CRC or More Data
+
+                            update_crc <= 1;
+                        end
+                        12: begin // CRC
+                            tx <= crc_computed[crc_bit];
+                            crc_bit <= crc_bit - 1;
+
+                            state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
+                        end
+                        13: begin // CRC Delim
+                            tx <= 0;
+                            state <= 14;
+
+                            stuff_bypass <= 1;
+                        end
+                        14: begin // ACK Slot
+                            tx <= 0;
+                            state <= 15;
+                        end
+                        15: begin // ACK Delim
+                            tx <= 0;
+                            state <= 16;
+                        end
+                        16, // EOF 1
+                        17, // EOF 2
+                        18, // EOF 3
+                        19, // EOF 4
+                        20, // EOF 5
+                        21, // EOF 6
+                        22, // EOF 7
+                        23, // Intermission 1
+                        24: begin // Intermission 2
+                            clean_send <= state == 24;
+                            tx <= 0;
+                            state <= state + 1;
+                        end
+                        25: begin // Intermission 3
+                            tx <= 0;
+                        end
+                    endcase
+                end
             end
+        end else begin
+            update_crc <= 0;
+            clear_crc <= 0;
+            clean_send <= 0;
         end
     end
 endmodule
