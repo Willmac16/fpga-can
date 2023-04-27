@@ -16,8 +16,7 @@ module can_transciever(
     output [3:0] rx_msg_bytes,
     output rx_msg_fresh,
     output transmission_error,
-    output clean_send,
-    output ssm_update
+    output clean_send
 );
     reg [6:0] RJW = 5;
 
@@ -228,7 +227,7 @@ module sync_sample_machine(
 
     reg last_rx_raw;
 
-    reg [8:0] cycle_length;
+    reg [8:0] cycle_length = 100;
 
     always @(posedge rst or posedge clk) begin
         if (rst) begin
@@ -237,7 +236,7 @@ module sync_sample_machine(
             phase_seg_two = 40;
 
             cycle_length = prop_seg + phase_seg_one + phase_seg_two + 1;
-            current_quantum <= 0;
+            current_quantum = 0;
         end else if (clk) begin
             if (last_rx_raw ^ rx_raw) begin
                 if (bus_idle)
@@ -278,9 +277,9 @@ module rx_pipeline(
     input rx,
     input updated_sample,
     input stuff_bypass,
-    output reg updated_bit,
+    output reg updated_bit = 0,
     output reg next_bit,
-    output reg stuff_error
+    output reg stuff_error = 0
 );
     reg [5:0] stuff_history;
     reg [5:0] history_valid;
@@ -320,7 +319,8 @@ module rx_pipeline(
                     updated_bit <= 1;
                 end
             end
-        end
+        end else
+            updated_bit <= 0;
     end
 endmodule
 
@@ -443,18 +443,18 @@ module message_reciever(
     output reg extended,
     output reg [63:0] msg = 0,
     output reg [3:0] msg_bytes,
-    output reg msg_fresh,
+    output reg msg_fresh = 0,
     output reg bus_idle = 1,
-    output reg stuff_bypass,
-    output reg FORM_ERROR,
-    output reg OVERLOAD_ERROR,
+    output reg stuff_bypass = 1,
+    output reg FORM_ERROR = 0,
+    output reg OVERLOAD_ERROR = 0,
     output reg fire_an_ack = 0,
     output reg running_start = 0,
     output reg transmission_error = 0
 );
     reg [14:0] crc_recieved;
     wire [14:0] crc_computed;
-    reg update_crc, clear_crc;
+    reg update_crc = 0, clear_crc = 1;
     reg [5:0] state = 0;
 
     reg [3:0] DLC;
@@ -483,7 +483,7 @@ module message_reciever(
                         FORM_ERROR <= 0;
                         throw_after_ack <= 0;
                         msg_fresh <= 0;
-                        clear_crc = 1;
+                        clear_crc <= 0;
                         update_crc <= 1;
                         running_start <= 1;
                         transmission_error <= 0;
@@ -491,7 +491,6 @@ module message_reciever(
                     end
                 end
                 1: begin // Base ID
-                    clear_crc <= 0;
 
                     update_crc <= 1;
 
@@ -506,7 +505,7 @@ module message_reciever(
                 2: begin // RTR / SRR
                     update_crc <= 1;
 
-                    rtr <= rx;
+                    rtr <= ~rx;
 
                     state <= extended ? 4 : 3; // R1 or IDE
 
@@ -533,7 +532,7 @@ module message_reciever(
                 8: begin // DLC 1
                     update_crc <= 1;
 
-                    DLC[9 - state] <= rx;
+                    DLC[9 - state] <= ~rx;
                     state <= state + 1;
 
                     transmission_error <= transmission_error | bit_error;
@@ -541,7 +540,7 @@ module message_reciever(
                 9: begin // DLC 0
                     update_crc <= 1;
 
-                    DLC[0] = rx;
+                    DLC[0] = ~rx;
                     DLC <= DLC & (DLC[3] ? 4'b1000 : 4'b0111); // Cap at 8 bytes
                     msg_bytes <= DLC;
                     state <= (DLC == 0) ? 11 : 10; // CRC or Data
@@ -607,6 +606,8 @@ module message_reciever(
                 begin
                     state <= rx ? 31: state + 1;
 
+                    clear_crc <= 1;
+
                     FORM_ERROR <= rx;
 
                     msg_fresh <= !rx & state == 20; // Only set msg_fresh if we are in the last EOF
@@ -636,7 +637,7 @@ module message_reciever(
                         OVERLOAD_ERROR <= 0;
                         throw_after_ack <= 0;
                         msg_fresh <= 0;
-                        clear_crc = 1;
+                        clear_crc <= 0;
                         update_crc <= 1;
 
                         running_start <= 1; // Fire up the sender machine on the first bit of arb
@@ -650,6 +651,8 @@ module message_reciever(
                 31: begin // Form Error
                     fire_an_ack <= 0;
                     state <= rx ? 31 : 32;
+
+                    clear_crc <= 1;
                 end
                 32, // Error Delim 2
                 33, // Error Delim 3
@@ -687,7 +690,7 @@ module message_sender(
     input [63:0] msg,
     input msg_exists,
     input running_start,
-    output reg stuff_bypass = 0,
+    output reg stuff_bypass = 1,
     output reg tx = 0,
     output reg clean_send = 0,
     output [1:0] txp_running_start
@@ -726,7 +729,10 @@ module message_sender(
         end else begin
             crc_rs <= 0;
 
-            if (bit_advance && msg_exists) begin // Holding restart high will freeze the state machine
+            if (!msg_exists) begin
+                state <= 0;
+                clear_crc <= 1;
+            end else if (bit_advance) begin // Holding restart high will freeze the state machine
                 case (state) // These nums do not match the state machine in the receiver
                     0: begin // Start of Frame // This never actually gets called
                         tx = 1;
@@ -754,7 +760,7 @@ module message_sender(
                         update_crc <= 1;
                     end
                     3: begin // RTR
-                        tx = rtr;
+                        tx = ~rtr;
                         state <= extended ? 5 : 4; // R1 or IDE
 
                         update_crc <= 1;
@@ -780,13 +786,13 @@ module message_sender(
                     7, // DLC 3
                     8, // DLC 2
                     9: begin // DLC 1
-                        tx = DLC[10 - state];
+                        tx = ~DLC[10 - state];
                         state <= state + 1;
 
                         update_crc <= 1;
                     end
                     10: begin // DLC 0
-                        tx = DLC[0];
+                        tx = ~DLC[0];
                         state <= (DLC == 0) ? 12 : 11; // CRC or Data
 
                         if (DLC != 0) begin
