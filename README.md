@@ -30,9 +30,13 @@ A CAN 2.0B Controller for FPGAs written in Verilog
 * [x] Message Sender (Takes in a msg id and up to 8 bytes and constructs & sends a CAN frame)
   * [x] Written
   * [x] Test Benched
+* [ ] Tested and Ready to go on actual hardware
+  * [x] Zero Warnings Synthesis
+  * [ ] Passes Test Benches with Changes
+  * [ ] Hardware implementation confirmed by logic analyzer
 * [ ] Configurable Msg Latch
     * [ ] Written
-* [  ] Configurable Msg FIFO
+* [ ] Configurable Msg FIFO
     * [ ] Written
     * [ ] Test Benched
   
