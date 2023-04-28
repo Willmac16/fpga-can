@@ -2,6 +2,8 @@
 
 A CAN 2.0B Controller for FPGAs written in Verilog
 
+Small enough that it'll fit on an ICE 40 (~700 LUTs for a minimal transceiver).
+
 ## Progress
 
 ### Minimum Viable Project (an error passive node)
