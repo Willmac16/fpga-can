@@ -10,206 +10,206 @@
 [size] 1440 780
 [pos] -1 -1
 *-15.810966 124480 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
-[treeopen] stuffed_transciever_tb.
-[treeopen] stuffed_transciever_tb.rcr.msg_rec.
-[treeopen] stuffed_transciever_tb.txcr.
-[treeopen] stuffed_transciever_tb.txcr.msg_rec.
-[treeopen] stuffed_transciever_tb.txcr.msg_send.
+[treeopen] stuffed_transceiver_tb.
+[treeopen] stuffed_transceiver_tb.rcr.msg_rec.
+[treeopen] stuffed_transceiver_tb.txcr.
+[treeopen] stuffed_transceiver_tb.txcr.msg_rec.
+[treeopen] stuffed_transceiver_tb.txcr.msg_send.
 [sst_width] 193
 [signals_width] 453
 [sst_expanded] 1
 [sst_vpaned_height] 231
 @28
-stuffed_transciever_tb.can_bus[0]
-stuffed_transciever_tb.clk[0]
+stuffed_transceiver_tb.can_bus[0]
+stuffed_transceiver_tb.clk[0]
 [color] 2
-stuffed_transciever_tb.txcr.tx_raw[0]
+stuffed_transceiver_tb.txcr.tx_raw[0]
 [color] 6
-stuffed_transciever_tb.rcr.tx_raw[0]
+stuffed_transceiver_tb.rcr.tx_raw[0]
 @200
 -
 -TXCR
 -SSM
 @28
-stuffed_transciever_tb.txcr.ssm.sync_tick[0]
-stuffed_transciever_tb.txcr.ssm.updated_sample[0]
+stuffed_transceiver_tb.txcr.ssm.sync_tick[0]
+stuffed_transceiver_tb.txcr.ssm.updated_sample[0]
 @22
-stuffed_transciever_tb.txcr.ssm.current_quantum[8:0]
+stuffed_transceiver_tb.txcr.ssm.current_quantum[8:0]
 @200
 -
 @24
 [color] 2
-stuffed_transciever_tb.txcr.msg_send.state[5:0]
+stuffed_transceiver_tb.txcr.msg_send.state[5:0]
 [color] 2
-stuffed_transciever_tb.txcr.msg_send.id_bit[4:0]
+stuffed_transceiver_tb.txcr.msg_send.id_bit[4:0]
 [color] 5
-stuffed_transciever_tb.txcr.msg_rec.state[5:0]
+stuffed_transceiver_tb.txcr.msg_rec.state[5:0]
 [color] 5
-stuffed_transciever_tb.txcr.msg_rec.id_bit[4:0]
+stuffed_transceiver_tb.txcr.msg_rec.id_bit[4:0]
 @28
-stuffed_transciever_tb.txcr.msg_send.restart[0]
-stuffed_transciever_tb.txcr.msg_send.running_start[0]
-stuffed_transciever_tb.txcr.rx_pipe.stuff_error[0]
-stuffed_transciever_tb.txcr.tx_pipe.tx[0]
-stuffed_transciever_tb.txcr.tx_pipe.next_bit[0]
+stuffed_transceiver_tb.txcr.msg_send.restart[0]
+stuffed_transceiver_tb.txcr.msg_send.running_start[0]
+stuffed_transceiver_tb.txcr.rx_pipe.stuff_error[0]
+stuffed_transceiver_tb.txcr.tx_pipe.tx[0]
+stuffed_transceiver_tb.txcr.tx_pipe.next_bit[0]
 @c00028
-stuffed_transciever_tb.txcr.tx_pipe.running_start[1:0]
+stuffed_transceiver_tb.txcr.tx_pipe.running_start[1:0]
 @28
-(0)stuffed_transciever_tb.txcr.tx_pipe.running_start[1:0]
-(1)stuffed_transciever_tb.txcr.tx_pipe.running_start[1:0]
+(0)stuffed_transceiver_tb.txcr.tx_pipe.running_start[1:0]
+(1)stuffed_transceiver_tb.txcr.tx_pipe.running_start[1:0]
 @1401200
 -group_end
 @28
-stuffed_transciever_tb.txcr.tx_pipe.bit_advance[0]
-stuffed_transciever_tb.txcr.tx_pipe.stuff_bypass[0]
+stuffed_transceiver_tb.txcr.tx_pipe.bit_advance[0]
+stuffed_transceiver_tb.txcr.tx_pipe.stuff_bypass[0]
 @23
-stuffed_transciever_tb.txcr.msg_rec.crc_computed[14:0]
+stuffed_transceiver_tb.txcr.msg_rec.crc_computed[14:0]
 @22
-stuffed_transciever_tb.txcr.msg_rec.crc_recieved[14:0]
-stuffed_transciever_tb.txcr.msg_send.crc_computed[14:0]
+stuffed_transceiver_tb.txcr.msg_rec.crc_recieved[14:0]
+stuffed_transceiver_tb.txcr.msg_send.crc_computed[14:0]
 @200
 -
 @28
-stuffed_transciever_tb.txcr.bit_err.disagreement[0]
-stuffed_transciever_tb.txcr.send.tx_line[0]
+stuffed_transceiver_tb.txcr.bit_err.disagreement[0]
+stuffed_transceiver_tb.txcr.send.tx_line[0]
 @200
 -
 -RCR
 @24
 [color] 6
-stuffed_transciever_tb.rcr.msg_rec.state[5:0]
+stuffed_transceiver_tb.rcr.msg_rec.state[5:0]
 [color] 6
-stuffed_transciever_tb.rcr.msg_rec.id_bit[4:0]
+stuffed_transceiver_tb.rcr.msg_rec.id_bit[4:0]
 @22
-stuffed_transciever_tb.rcr.msg_rec.crc_computed[14:0]
-stuffed_transciever_tb.rcr.msg_rec.crc_recieved[14:0]
+stuffed_transceiver_tb.rcr.msg_rec.crc_computed[14:0]
+stuffed_transceiver_tb.rcr.msg_rec.crc_recieved[14:0]
 @200
 -
 -CRC Stuff
 -TX CRC
 @28
-stuffed_transciever_tb.txcr.msg_send.crcer.clear_crc[0]
+stuffed_transceiver_tb.txcr.msg_send.crcer.clear_crc[0]
 @22
-stuffed_transciever_tb.txcr.msg_send.crcer.crc_reg[15:0]
+stuffed_transceiver_tb.txcr.msg_send.crcer.crc_reg[15:0]
 @28
-stuffed_transciever_tb.txcr.msg_send.crcer.next_bit[0]
-stuffed_transciever_tb.txcr.msg_send.crcer.running_start[1:0]
-stuffed_transciever_tb.txcr.msg_send.crcer.update_crc[0]
+stuffed_transceiver_tb.txcr.msg_send.crcer.next_bit[0]
+stuffed_transceiver_tb.txcr.msg_send.crcer.running_start[1:0]
+stuffed_transceiver_tb.txcr.msg_send.crcer.update_crc[0]
 @200
 -
 -RX CRC
 @22
-stuffed_transciever_tb.txcr.msg_rec.crcer.crc_reg[15:0]
+stuffed_transceiver_tb.txcr.msg_rec.crcer.crc_reg[15:0]
 @28
-stuffed_transciever_tb.txcr.msg_rec.crcer.next_bit[0]
-stuffed_transciever_tb.txcr.msg_rec.crcer.update_crc[0]
-stuffed_transciever_tb.txcr.msg_rec.crcer.clear_crc[0]
+stuffed_transceiver_tb.txcr.msg_rec.crcer.next_bit[0]
+stuffed_transceiver_tb.txcr.msg_rec.crcer.update_crc[0]
+stuffed_transceiver_tb.txcr.msg_rec.crcer.clear_crc[0]
 @200
 -
 -
 -RCR CRC
 @22
-stuffed_transciever_tb.rcr.msg_rec.crcer.crc_reg[15:0]
+stuffed_transceiver_tb.rcr.msg_rec.crcer.crc_reg[15:0]
 @28
-stuffed_transciever_tb.rcr.msg_rec.crcer.next_bit[0]
-stuffed_transciever_tb.rcr.msg_rec.crcer.update_crc[0]
-stuffed_transciever_tb.rcr.msg_rec.crcer.clear_crc[0]
+stuffed_transceiver_tb.rcr.msg_rec.crcer.next_bit[0]
+stuffed_transceiver_tb.rcr.msg_rec.crcer.update_crc[0]
+stuffed_transceiver_tb.rcr.msg_rec.crcer.clear_crc[0]
 @200
 -
 -RXP
 @28
-stuffed_transciever_tb.txcr.rx_pipe.stuff_bypass[0]
+stuffed_transceiver_tb.txcr.rx_pipe.stuff_bypass[0]
 @c00022
-stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
+stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
 @28
-(0)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
-(1)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
-(2)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
-(3)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
-(4)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
-(5)stuffed_transciever_tb.txcr.rx_pipe.history_valid[5:0]
+(0)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
+(1)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
+(2)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
+(3)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
+(4)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
+(5)stuffed_transceiver_tb.txcr.rx_pipe.history_valid[5:0]
 @1401200
 -group_end
 @c00022
-stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
+stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
 @28
-(0)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-(1)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-(2)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-(3)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-(4)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-(5)stuffed_transciever_tb.txcr.rx_pipe.stuff_history[5:0]
-stuffed_transciever_tb.txcr.rx_pipe.next_bit[0]
+(0)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+(1)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+(2)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+(3)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+(4)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+(5)stuffed_transceiver_tb.txcr.rx_pipe.stuff_history[5:0]
+stuffed_transceiver_tb.txcr.rx_pipe.next_bit[0]
 @1401200
 -group_end
 @200
 -
 -TXP
 @28
-stuffed_transciever_tb.txcr.tx_pipe.bit_advance[0]
-stuffed_transciever_tb.txcr.tx_pipe.clk[0]
+stuffed_transceiver_tb.txcr.tx_pipe.bit_advance[0]
+stuffed_transceiver_tb.txcr.tx_pipe.clk[0]
 @c00022
-stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
+stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
 @28
-(0)stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
-(1)stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
-(2)stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
-(3)stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
-(4)stuffed_transciever_tb.txcr.tx_pipe.history_valid[4:0]
+(0)stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
+(1)stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
+(2)stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
+(3)stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
+(4)stuffed_transceiver_tb.txcr.tx_pipe.history_valid[4:0]
 @1401200
 -group_end
 @28
-stuffed_transciever_tb.txcr.tx_pipe.next_bit[0]
-stuffed_transciever_tb.txcr.tx_pipe.running_start[1:0]
-stuffed_transciever_tb.txcr.tx_pipe.stuff_bypass[0]
+stuffed_transceiver_tb.txcr.tx_pipe.next_bit[0]
+stuffed_transceiver_tb.txcr.tx_pipe.running_start[1:0]
+stuffed_transceiver_tb.txcr.tx_pipe.stuff_bypass[0]
 @22
-stuffed_transciever_tb.txcr.tx_pipe.stuff_history[4:0]
+stuffed_transceiver_tb.txcr.tx_pipe.stuff_history[4:0]
 @28
-stuffed_transciever_tb.txcr.tx_pipe.tx[0]
-stuffed_transciever_tb.txcr.tx_pipe.updated_sample[0]
+stuffed_transceiver_tb.txcr.tx_pipe.tx[0]
+stuffed_transceiver_tb.txcr.tx_pipe.updated_sample[0]
 @200
 -
 -
 -
 -The TUBES
 @28
-stuffed_transciever_tb.txcr.clean_send[0]
-stuffed_transciever_tb.txcr.tx_extended[0]
+stuffed_transceiver_tb.txcr.clean_send[0]
+stuffed_transceiver_tb.txcr.tx_extended[0]
 @22
-stuffed_transciever_tb.txcr.tx_msg[63:0]
-stuffed_transciever_tb.txcr.tx_msg_bytes[3:0]
+stuffed_transceiver_tb.txcr.tx_msg[63:0]
+stuffed_transceiver_tb.txcr.tx_msg_bytes[3:0]
 @28
-stuffed_transciever_tb.txcr.tx_msg_exists[0]
+stuffed_transceiver_tb.txcr.tx_msg_exists[0]
 @22
-stuffed_transciever_tb.txcr.tx_msg_id[28:0]
+stuffed_transceiver_tb.txcr.tx_msg_id[28:0]
 @28
-stuffed_transciever_tb.txcr.tx_raw[0]
-stuffed_transciever_tb.txcr.tx_rtr[0]
+stuffed_transceiver_tb.txcr.tx_raw[0]
+stuffed_transceiver_tb.txcr.tx_rtr[0]
 @200
 -
 @28
-stuffed_transciever_tb.txcr.rx_extended[0]
+stuffed_transceiver_tb.txcr.rx_extended[0]
 @22
-stuffed_transciever_tb.txcr.rx_msg[63:0]
-stuffed_transciever_tb.txcr.rx_msg_bytes[3:0]
+stuffed_transceiver_tb.txcr.rx_msg[63:0]
+stuffed_transceiver_tb.txcr.rx_msg_bytes[3:0]
 @28
-stuffed_transciever_tb.txcr.rx_msg_fresh[0]
+stuffed_transceiver_tb.txcr.rx_msg_fresh[0]
 @22
-stuffed_transciever_tb.txcr.rx_msg_id[28:0]
+stuffed_transceiver_tb.txcr.rx_msg_id[28:0]
 @28
-stuffed_transciever_tb.txcr.rx_raw[0]
-stuffed_transciever_tb.txcr.rx_rtr[0]
+stuffed_transceiver_tb.txcr.rx_raw[0]
+stuffed_transceiver_tb.txcr.rx_rtr[0]
 @200
 -
 -
 -TX Send Machine
 @28
-stuffed_transciever_tb.txcr.send.bus_idle[0]
-stuffed_transciever_tb.txcr.send.fire_an_ack[0]
-stuffed_transciever_tb.txcr.send.fire_an_error[0]
-stuffed_transciever_tb.txcr.send.pipeline_val[0]
-stuffed_transciever_tb.txcr.send.sync_tick[0]
-stuffed_transciever_tb.txcr.send.tx_line[0]
-stuffed_transciever_tb.txcr.send.tx_msg_exists[0]
+stuffed_transceiver_tb.txcr.send.bus_idle[0]
+stuffed_transceiver_tb.txcr.send.fire_an_ack[0]
+stuffed_transceiver_tb.txcr.send.fire_an_error[0]
+stuffed_transceiver_tb.txcr.send.pipeline_val[0]
+stuffed_transceiver_tb.txcr.send.sync_tick[0]
+stuffed_transceiver_tb.txcr.send.tx_line[0]
+stuffed_transceiver_tb.txcr.send.tx_msg_exists[0]
 [pattern_trace] 1
 [pattern_trace] 0

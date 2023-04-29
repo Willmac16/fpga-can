@@ -18,12 +18,12 @@ module can_transceiver(
     output transmission_error,
     output clean_send
 );
-    reg [6:0] RJW = 5;
+    reg [6:0] RJW = 1;
 
     // SSM Outs
-    wire ssm_rx, ssm_update, ssm_sync, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
+    wire ssm_rx, ssm_sync, ssm_update, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
 
-    // Reciever Outs
+    // Receiver Outs
     wire bus_idle, stuff_bypass, fire_an_ack, running_start;
 
     // rx Pipeline Outs
@@ -460,6 +460,7 @@ endmodule
 // This single stateless machine handles all the competing interests for the tx line
 //
 module send_machine(
+    input clk,
     input bus_idle, // if the bus is idle & a tx msg is ready this will SOF
     input tx_msg_exists,
     input fire_an_ack,
@@ -505,12 +506,15 @@ module message_receiver(
     output reg OVERLOAD_ERROR = 0,
     output reg fire_an_ack = 0,
     output reg running_start = 0,
-    output reg transmission_error = 0
+    output reg transmission_error = 0,
+    output [5:0] state_out
 );
     reg [14:0] crc_recieved = 0;
     wire [14:0] crc_computed;
     reg update_crc = 0, clear_crc = 1;
     reg [5:0] state = 0;
+
+    assign state_out = state;
 
     reg [3:0] DLC = 0;
     reg [5:0] bit_counter;
@@ -523,9 +527,11 @@ module message_receiver(
     crc_step_machine crcer (.clk(clk), .next_bit(rx), .update_crc(update_crc), .clear_crc(clear_crc), .running_start(2'b00), .crc(crc_computed));
 
     always @(posedge clk) begin
-        if (stuff_error)
+        if (stuff_error) begin
             state <= 31;
-        else if (rec_tick && updated_sample) begin
+            stuff_bypass <= 1;
+            transmission_error <= 1;
+        end else if (rec_tick && updated_sample) begin
             case (state)
                 0: begin // Idle / SOF
                     if (~rx) begin
@@ -562,7 +568,7 @@ module message_receiver(
                 2: begin // RTR / SRR
                     update_crc <= 1;
 
-                    rtr <= ~rx;
+                    rtr <= rx;
 
                     state <= extended ? 4 : 3; // R1 or IDE
 
@@ -571,8 +577,8 @@ module message_receiver(
                 3: begin // IDE
                     update_crc <= 1;
 
-                    extended <= !rx;
-                    state <= rx ? 5 : 1; // R0 or Finish ID
+                    extended <= rx;
+                    state <= rx ? 1 : 5; // R0 or Finish ID
 
                     transmission_error <= transmission_error | bit_error;
                 end
@@ -589,7 +595,7 @@ module message_receiver(
                 8: begin // DLC 1
                     update_crc <= 1;
 
-                    DLC[9 - state] <= ~rx;
+                    DLC[9 - state] <= rx;
                     state <= state + 1;
 
                     transmission_error <= transmission_error | bit_error;
@@ -597,12 +603,12 @@ module message_receiver(
                 9: begin // DLC 0
                     update_crc <= 1;
 
-                    DLC[0] = ~rx;
+                    DLC[0] = rx;
                     DLC <= DLC & (DLC[3] ? 4'b1000 : 4'b0111); // Cap at 8 bytes
                     msg_bytes <= DLC;
-                    state <= (DLC == 0) ? 11 : 10; // CRC or Data
+                    state <= (DLC == 0 | rtr) ? 11 : 10; // CRC or Data
 
-                    if (DLC != 0) begin
+                    if (DLC != 0 & !rtr) begin
                         bit_counter[5:3] <= DLC - 1;
                         bit_counter[2:0] <= 3'b111;
                     end
@@ -661,7 +667,7 @@ module message_receiver(
                 19, // EOF 5
                 20: // EOF 6
                 begin
-                    state <= ~rx ? 31: state + 1;
+                    state <= rx ? state + 1 : 31;
 
                     clear_crc <= 1;
 
@@ -707,7 +713,7 @@ module message_receiver(
                 30, // Overload Packet
                 31: begin // Form Error
                     fire_an_ack <= 0;
-                    state <= rx ? 31 : 32;
+                    state <= rx ? 32 : 31;
 
                     clear_crc <= 1;
                 end
@@ -718,15 +724,15 @@ module message_receiver(
                 36, // Error Delim 6
                 37: // Error Delim 7
                 begin
-                    state <= rx ? 31 : state + 1;
+                    state <= rx ? state + 1 : 31;
                 end
                 38: // Error Delim 8
                 begin
-                    state <= rx ? 31 : 22;
+                    state <= rx ? 22 : 31;
 
-                    // If rx is low it clears whichever type of error was high
-                    FORM_ERROR <= FORM_ERROR | rx;
-                    OVERLOAD_ERROR <= OVERLOAD_ERROR | rx;
+                    // If rx is high it clears whichever type of error was high
+                    FORM_ERROR <= FORM_ERROR & ~rx;
+                    OVERLOAD_ERROR <= OVERLOAD_ERROR & ~rx;
                 end
             endcase
         end else begin
@@ -750,10 +756,13 @@ module message_sender(
     output reg stuff_bypass = 1,
     output reg tx = 1,
     output reg clean_send = 0,
-    output [1:0] txp_running_start
+    output [1:0] txp_running_start,
+    output [5:0] state_out
 );
     reg [5:0] state = 0;
     reg [4:0] id_bit;
+
+    assign state_out = state;
 
     wire [3:0] DLC;
 
@@ -776,8 +785,9 @@ module message_sender(
             state <= 0;
             clear_crc <= 1;
             stuff_bypass <= 1;
+            tx <= 1;
         end else if (sender_tick) begin
-            if (running_start) begin
+            if (running_start && msg_exists) begin
                 state <= 1;
                 id_bit <= 26;
                 stuff_bypass <= 0;
@@ -791,15 +801,18 @@ module message_sender(
                 if (!msg_exists) begin
                     state <= 0;
                     clear_crc <= 1;
+                    stuff_bypass <= 1;
+                    tx <= 1;
                 end else if (bit_advance) begin // Holding restart high will freeze the state machine
                     case (state) // These nums do not match the state machine in the receiver
-                        0: begin // Start of Frame // This never actually gets called
-                            tx = 0;
-                            state <= 1;
-                            id_bit <= 28;
-                            stuff_bypass <= 0;
+                        0: begin // Start of Frame
+                            // This never actually gets called
+                            // tx = 0;
+                            // state <= 1;
+                            // id_bit <= 28;
+                            // stuff_bypass <= 0;
 
-                            update_crc <= 1;
+                            // update_crc <= 1;
                         end
                         1: begin // ID
                             tx = msg_id[id_bit];
@@ -813,19 +826,19 @@ module message_sender(
                             update_crc <= 1;
                         end
                         2: begin // SRR
-                            tx = 0;
+                            tx = 1;
                             state <= 4; // IDE
 
                             update_crc <= 1;
                         end
                         3: begin // RTR
-                            tx = ~rtr;
+                            tx = rtr;
                             state <= extended ? 5 : 4; // R1 or IDE
 
                             update_crc <= 1;
                         end
                         4: begin // IDE
-                            tx = !extended;
+                            tx = extended;
                             state <= extended ? 1 : 6; // ID or R1
 
                             update_crc <= 1;
@@ -845,14 +858,14 @@ module message_sender(
                         7, // DLC 3
                         8, // DLC 2
                         9: begin // DLC 1
-                            tx = ~DLC[10 - state];
+                            tx = DLC[10 - state];
                             state <= state + 1;
 
                             update_crc <= 1;
                         end
                         10: begin // DLC 0
-                            tx = ~DLC[0];
-                            state <= (DLC == 0) ? 12 : 11; // CRC or Data
+                            tx = DLC[0];
+                            state <= (DLC == 0 | rtr) ? 12 : 11; // CRC or Data
 
                             if (DLC != 0) begin
                                 bit_counter[5:3] <= DLC - 1;
@@ -866,7 +879,7 @@ module message_sender(
                         11: begin // Data
                             bit_counter <= bit_counter - 1;
 
-                            tx = msg[bit_counter];
+                            tx <= msg[bit_counter];
 
                             state <= bit_counter == 0 ? 12 : 11; // CRC or More Data
 
@@ -876,13 +889,13 @@ module message_sender(
                             tx <= crc_computed[crc_bit];
                             crc_bit <= crc_bit - 1;
 
-                            state <= crc_bit == 0 ? 13 : 12; // CRC Delim or More CRC
+                            state <= crc_bit ? 12 : 13; // More CRC or CRC Delim
                         end
                         13: begin // CRC Delim
+                            stuff_bypass <= 1;
+
                             tx <= 1;
                             state <= 14;
-
-                            stuff_bypass <= 1;
                         end
                         14: begin // ACK Slot
                             tx <= 1;

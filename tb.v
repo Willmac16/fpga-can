@@ -109,7 +109,7 @@ module stuffed_transceiver_tb;
             #1;
         end
 
-        tx_msg_exists_two <= 1;
+        // tx_msg_exists_two <= 1;
         tx_msg_id_two <= {11'b01100110011, 18'b0};
         tx_msg_bytes_two <= 5;
         tx_rtr_two <= 0;
@@ -117,16 +117,16 @@ module stuffed_transceiver_tb;
         tx_msg_two <= {24'd0, 40'h0BADC0FFEE};
 
         tx_msg_exists <= 1;
-        tx_msg_id <= 29'h180CE362;
-        tx_msg_bytes <= 8;
-        tx_rtr <= 0;
-        tx_extended <= 1;
-        tx_msg <= 64'hF1FA040C666495A5;
+        tx_msg_id <= {11'b01100111000, 18'h3F0F0};
+        tx_msg_bytes <= 4'd3;
+        tx_rtr <= 1'b0;
+        tx_extended <= 1'b0;
+        tx_msg <= {40'b0, 24'b01010101_10101010_00110011};
 
 
 
         // Send the message
-        for (i = 0; i < 100000000; i = i + 1) begin
+        for (i = 0; i < 1000000; i = i + 1) begin
             clk <= ~clk;
             #1;
         end
