@@ -65,7 +65,7 @@ stuffed_transceiver_tb.txcr.tx_pipe.stuff_bypass[0]
 @23
 stuffed_transceiver_tb.txcr.msg_rec.crc_computed[14:0]
 @22
-stuffed_transceiver_tb.txcr.msg_rec.crc_recieved[14:0]
+stuffed_transceiver_tb.txcr.msg_rec.crc_received[14:0]
 stuffed_transceiver_tb.txcr.msg_send.crc_computed[14:0]
 @200
 -
@@ -82,7 +82,7 @@ stuffed_transceiver_tb.rcr.msg_rec.state[5:0]
 stuffed_transceiver_tb.rcr.msg_rec.id_bit[4:0]
 @22
 stuffed_transceiver_tb.rcr.msg_rec.crc_computed[14:0]
-stuffed_transceiver_tb.rcr.msg_rec.crc_recieved[14:0]
+stuffed_transceiver_tb.rcr.msg_rec.crc_received[14:0]
 @200
 -
 -CRC Stuff

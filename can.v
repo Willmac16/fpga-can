@@ -16,15 +16,19 @@ module can_transceiver(
     output [3:0] rx_msg_bytes,
     output rx_msg_fresh,
     output transmission_error,
-    output clean_send
+    output clean_send,
+    output FORM_ERROR,
+    output OVERLOAD_ERROR,
+    output bus_idle,
+    output ssm_sync
 );
-    reg [6:0] RJW = 1;
+    reg [6:0] RJW = 10;
 
     // SSM Outs
-    wire ssm_rx, ssm_sync, ssm_update, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
+    wire ssm_rx, ssm_update, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
 
     // Receiver Outs
-    wire bus_idle, stuff_bypass, fire_an_ack, running_start;
+    wire stuff_bypass, fire_an_ack, running_start;
 
     // rx Pipeline Outs
     wire pipe_rx, pipe_update, stuff_error;
@@ -44,6 +48,7 @@ module can_transceiver(
 
     sync_sample_machine ssm(
         .rx_raw(rx_raw),
+        .tx_raw(tx_raw),
         .clk(clk),
         .rst(rst),
         .RJW(RJW),
@@ -87,7 +92,9 @@ module can_transceiver(
         .stuff_bypass(stuff_bypass),
         .fire_an_ack(fire_an_ack),
         .running_start(running_start),
-        .transmission_error(transmission_error)
+        .transmission_error(transmission_error),
+        .FORM_ERROR(FORM_ERROR),
+        .OVERLOAD_ERROR(OVERLOAD_ERROR)
     );
 
     tx_pipeline tx_pipe(
@@ -164,6 +171,7 @@ module can_receiver(
 
     sync_sample_machine ssm(
         .rx_raw(rx_raw),
+        .tx_raw(tx_raw),
         .clk(clk),
         .rst(rst),
         .RJW(RJW),
@@ -221,6 +229,7 @@ endmodule
 
 module sync_sample_machine(
     input rx_raw,
+    input tx_raw,
     input clk,
     input [6:0] RJW,
     input bus_idle,
@@ -235,25 +244,25 @@ module sync_sample_machine(
 );
 
     reg [8:0] current_quantum = 0;
-    reg [6:0] prop_seg = 19;
+    reg [6:0] prop_seg = 18;
     reg [6:0] phase_seg_one = 40;
     reg [6:0] phase_seg_two = 40;
 
+    reg yet_to_resync = 1'b1;
 
     reg last_rx_raw;
-
-    reg [8:0] cycle_length = 100;
-
     always @(posedge rst or posedge clk) begin
         if (rst) begin
-            prop_seg = 19;
-            phase_seg_one = 40;
-            phase_seg_two = 40;
+            prop_seg <= 18;
+            phase_seg_one <= 40;
+            phase_seg_two <= 40;
 
-            cycle_length = prop_seg + phase_seg_one + phase_seg_two + 1;
-            current_quantum = 0;
+            current_quantum <= 0;
+
+            yet_to_resync <= 1;
         end else if (clk) begin
-            if (last_rx_raw ^ rx_raw) begin
+            // Only sync on recessive to dominant transition of bus not caused by us
+            if (!rx_raw & last_rx_raw & tx_raw) begin
                 if (bus_idle) begin
                     current_quantum <= 0; // Hard Sync
                     sync_tick <= 1;
@@ -263,26 +272,24 @@ module sync_sample_machine(
                     rec_tick <= 0;
                     sender_tick <= 0;
                     txp_tick <= 0;
-                end else begin
+                    yet_to_resync <= 1;
+                end else if (yet_to_resync) begin
+                    yet_to_resync <= 0;
                     if (current_quantum < RJW) begin
                         current_quantum <= 0; // Resync Smaller than Jump width
-                        sync_tick <= 1;
-                        // set all the other ticks to 0
-                        sample_tick <= 0;
-                        rxp_tick <= 0;
-                        rec_tick <= 0;
-                        sender_tick <= 0;
-                        txp_tick <= 0;
-                    end else if (cycle_length - current_quantum < RJW)
+                    end else if ((prop_seg + phase_seg_one + 1 + phase_seg_two) - current_quantum < RJW)
                         current_quantum <= 0; // Resync Smaller than Jump width
-                    else if (current_quantum > 1 + prop_seg + phase_seg_one)
-                        phase_seg_one <= phase_seg_two - RJW; // Positive Phase error correction
-                    else
-                        phase_seg_two <= phase_seg_two + RJW; // Negative Phase error correction
+                    else if (current_quantum > 1 + prop_seg + phase_seg_one) begin
+                        // Negative Phase Error
+                        //phase_seg_two <= phase_seg_two - RJW; // Negative Phase error correction
+                    end else begin
+                        // Positive Phase Error
+                        //phase_seg_one <= phase_seg_one + RJW; // Positive Phase error correction
+                    end
                 end
             end
 
-            if (current_quantum >= cycle_length) begin
+            if (current_quantum >= (prop_seg + phase_seg_one + 1 + phase_seg_two)) begin
                 current_quantum <= 0;
                 sync_tick <= 1;
                 // set all the other ticks to 0
@@ -291,6 +298,7 @@ module sync_sample_machine(
                 rec_tick <= 0;
                 sender_tick <= 0;
                 txp_tick <= 0;
+                yet_to_resync <= 1;
             end else begin
                 current_quantum <= current_quantum + 1;
                 sync_tick <= 0;
@@ -470,6 +478,7 @@ module send_machine(
     output reg tx_line
 );
     always @(posedge sync_tick) begin
+        // Pull low if theres an Error, if not idle and ACK, if idle and a msg exists, or if pipeline val is low
         tx_line <= !fire_an_error & (!fire_an_ack | bus_idle) & (!bus_idle | !tx_msg_exists) & pipeline_val;
     end
 endmodule
@@ -496,7 +505,7 @@ module message_receiver(
     input msg_exists,
     output reg [28:0] msg_id,
     output reg rtr,
-    output reg extended,
+    output reg extended = 0,
     output reg [63:0] msg = 0,
     output reg [3:0] msg_bytes,
     output reg msg_fresh = 0,
@@ -509,7 +518,7 @@ module message_receiver(
     output reg transmission_error = 0,
     output [5:0] state_out
 );
-    reg [14:0] crc_recieved = 0;
+    reg [14:0] crc_received = 0;
     wire [14:0] crc_computed;
     reg update_crc = 0, clear_crc = 1;
     reg [5:0] state = 0;
@@ -539,7 +548,7 @@ module message_receiver(
                         bus_idle <= 0;
                         msg_id <= 0;
                         id_bit <= 28;
-                        extended <= 28;
+                        extended <= 0;
                         stuff_bypass <= 0;
                         FORM_ERROR <= 0;
                         throw_after_ack <= 0;
@@ -563,7 +572,7 @@ module message_receiver(
                     if (id_bit == 18 || id_bit == 0)
                         state <= 2;
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 2: begin // RTR / SRR
                     update_crc <= 1;
@@ -572,7 +581,7 @@ module message_receiver(
 
                     state <= extended ? 4 : 3; // R1 or IDE
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 3: begin // IDE
                     update_crc <= 1;
@@ -580,7 +589,7 @@ module message_receiver(
                     extended <= rx;
                     state <= rx ? 1 : 5; // R0 or Finish ID
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 4, // R1
                 5: begin // R0
@@ -588,7 +597,7 @@ module message_receiver(
 
                     state <= state + 1;
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 6, // DLC 3
                 7, // DLC 2
@@ -598,7 +607,7 @@ module message_receiver(
                     DLC[9 - state] <= rx;
                     state <= state + 1;
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 9: begin // DLC 0
                     update_crc <= 1;
@@ -615,7 +624,7 @@ module message_receiver(
 
                     crc_bit <= 14;
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 10: begin // Data
                     update_crc <= 1;
@@ -625,26 +634,27 @@ module message_receiver(
 
                     state <= bit_counter == 0 ? 11 : 10;
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 11: begin // CRC
-                    crc_recieved[crc_bit] <= rx;
+                    crc_received[crc_bit] <= rx;
                     crc_bit <= crc_bit - 1;
                     if (crc_bit == 0) begin
                         state <= 12;
-                        stuff_bypass <= 1; // Disable stuffing now that the CRC is done
                     end
 
-                    transmission_error <= transmission_error | bit_error;
+                    transmission_error <= (transmission_error | bit_error) & msg_exists;
                 end
                 12: begin // CRC Delim
                     state <= ~rx ? 31 : 13;
 
+                    stuff_bypass <= 1; // Disable stuffing now
+
                     FORM_ERROR <= ~rx;
                     transmission_error <= transmission_error | ~rx;
-                    // Arm the ACK
-                    fire_an_ack <= (crc_recieved == crc_computed) && (!msg_exists || transmission_error);
-                    throw_after_ack <= crc_recieved != crc_computed;
+                    // Arm the ACK if the CRC is good and we aren't actively transmitting
+                    fire_an_ack <= (crc_received == crc_computed) && (!msg_exists || transmission_error);
+                    throw_after_ack <= crc_received != crc_computed;
                 end
                 13: begin // ACK Slot
                     fire_an_ack <= 0;
@@ -694,7 +704,7 @@ module message_receiver(
                         bus_idle <= 0;
                         msg_id <= 0;
                         id_bit <= 28;
-                        extended <= 28;
+                        extended <= 0;
                         stuff_bypass <= 0; // Really need to make sure bit stuffing alarm works
                         FORM_ERROR <= 0;
                         OVERLOAD_ERROR <= 0;
@@ -914,7 +924,7 @@ module message_sender(
                         22, // EOF 7
                         23, // Intermission 1
                         24: begin // Intermission 2
-                            clean_send <= state == 24;
+                            clean_send <= state == 22;
                             tx <= 1;
                             state <= state + 1;
                         end

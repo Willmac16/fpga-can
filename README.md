@@ -35,12 +35,12 @@ Small enough that it'll fit on an ICE 40 (~700 LUTs for a minimal transceiver).
 * [ ] Tested and Ready to go on actual hardware
   * [x] Zero Warnings Synthesis
   * [x] Passes Test Benches with Changes
-  * [ ] Hardware implementation confirmed by logic analyzer
+  * [x] Hardware implementation confirmed by logic analyzer
 * [ ] Configurable Msg Latch
-    * [ ] Written
+  * [ ] Written
 * [ ] Configurable Msg FIFO
-    * [ ] Written
-    * [ ] Test Benched
+  * [ ] Written
+  * [ ] Test Benched
 
 ### More Features I want to finish (to meet the whole spec)
 
