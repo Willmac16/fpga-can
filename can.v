@@ -20,9 +20,10 @@ module can_transceiver(
     output FORM_ERROR,
     output OVERLOAD_ERROR,
     output bus_idle,
-    output ssm_sync
+    output ssm_sync,
+    output yet_to_resync
 );
-    reg [6:0] RJW = 10;
+    reg [6:0] RJW = 16;
 
     // SSM Outs
     wire ssm_rx, ssm_update, ssm_rxp, ssm_rec, ssm_sender, ssm_txp;
@@ -59,7 +60,8 @@ module can_transceiver(
         .rxp_tick(ssm_rxp),
         .txp_tick(ssm_txp),
         .rec_tick(ssm_rec),
-        .sender_tick(ssm_sender)
+        .sender_tick(ssm_sender),
+        .yet_to_resync(yet_to_resync)
     );
 
     rx_pipeline rx_pipe(
@@ -240,15 +242,14 @@ module sync_sample_machine(
     output reg rxp_tick,
     output reg rec_tick,
     output reg sender_tick,
-    output reg txp_tick
+    output reg txp_tick,
+    output reg yet_to_resync = 1'b1
 );
 
     reg [8:0] current_quantum = 0;
     reg [6:0] prop_seg = 18;
     reg [6:0] phase_seg_one = 40;
     reg [6:0] phase_seg_two = 40;
-
-    reg yet_to_resync = 1'b1;
 
     reg last_rx_raw;
     always @(posedge rst or posedge clk) begin
@@ -262,7 +263,7 @@ module sync_sample_machine(
             yet_to_resync <= 1;
         end else if (clk) begin
             // Only sync on recessive to dominant transition of bus not caused by us
-            if (!rx_raw & last_rx_raw & tx_raw) begin
+            if (!rx_raw & last_rx_raw & tx_raw & yet_to_resync) begin
                 if (bus_idle) begin
                     current_quantum <= 0; // Hard Sync
                     sync_tick <= 1;
@@ -272,8 +273,8 @@ module sync_sample_machine(
                     rec_tick <= 0;
                     sender_tick <= 0;
                     txp_tick <= 0;
-                    yet_to_resync <= 1;
-                end else if (yet_to_resync) begin
+                    yet_to_resync <= 0;
+                end else begin
                     yet_to_resync <= 0;
                     if (current_quantum < RJW) begin
                         current_quantum <= 0; // Resync Smaller than Jump width
@@ -281,55 +282,60 @@ module sync_sample_machine(
                         current_quantum <= 0; // Resync Smaller than Jump width
                     else if (current_quantum > 1 + prop_seg + phase_seg_one) begin
                         // Negative Phase Error
-                        //phase_seg_two <= phase_seg_two - RJW; // Negative Phase error correction
+                        phase_seg_two <= phase_seg_two - RJW; // Negative Phase error correction
                     end else begin
                         // Positive Phase Error
-                        //phase_seg_one <= phase_seg_one + RJW; // Positive Phase error correction
+                        phase_seg_one <= phase_seg_one + RJW; // Positive Phase error correction
                     end
                 end
-            end
-
-            if (current_quantum >= (prop_seg + phase_seg_one + 1 + phase_seg_two)) begin
-                current_quantum <= 0;
-                sync_tick <= 1;
-                // set all the other ticks to 0
-                sample_tick <= 0;
-                rxp_tick <= 0;
-                rec_tick <= 0;
-                sender_tick <= 0;
-                txp_tick <= 0;
-                yet_to_resync <= 1;
             end else begin
-                current_quantum <= current_quantum + 1;
-                sync_tick <= 0;
+                if (current_quantum >= (prop_seg + phase_seg_one + 1 + phase_seg_two)) begin
+                    current_quantum <= 0;
+                    sync_tick <= 1;
+                    // reset the phase_seg lengths
+                    phase_seg_one <= 40;
+                    phase_seg_two <= 40;
 
-                case (current_quantum - (prop_seg + phase_seg_one))
-                    1: begin
-                        rx <= rx_raw;
-                        sample_tick <= 1;
-                    end
-                    2: begin
-                        rxp_tick <= 1;
-                        sample_tick <= 0;
-                    end
-                    3: begin
-                        rec_tick <= 1;
-                        rxp_tick <= 0;
-                    end
-                    4: begin
-                        sender_tick <= 1;
-                        rec_tick <= 0;
-                    end
-                    5: begin
-                        txp_tick <= 1;
-                        sender_tick <= 0;
-                    end
-                    6:
-                        txp_tick <= 0;
-                endcase
+
+                    // set all the other ticks to 0
+                    sample_tick <= 0;
+                    rxp_tick <= 0;
+                    rec_tick <= 0;
+                    sender_tick <= 0;
+                    txp_tick <= 0;
+                    yet_to_resync <= 1;
+                end else begin
+                    current_quantum <= current_quantum + 1;
+                    sync_tick <= 0;
+
+                    case (current_quantum - (prop_seg + phase_seg_one))
+                        1: begin
+                            rx <= rx_raw;
+                            sample_tick <= 1;
+                        end
+                        2: begin
+                            rxp_tick <= 1;
+                            sample_tick <= 0;
+                        end
+                        3: begin
+                            rec_tick <= 1;
+                            rxp_tick <= 0;
+                        end
+                        4: begin
+                            sender_tick <= 1;
+                            rec_tick <= 0;
+                        end
+                        5: begin
+                            txp_tick <= 1;
+                            sender_tick <= 0;
+                        end
+                        6:
+                            txp_tick <= 0;
+                    endcase
+                end
+
+                last_rx_raw <= rx_raw;
             end
-
-            last_rx_raw <= rx_raw;
         end
     end
 endmodule

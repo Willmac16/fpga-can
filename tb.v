@@ -33,7 +33,7 @@ module stuffed_transceiver_tb;
 
     always @(posedge clk) begin
         cbb <= {cbb[19:0], txcr_tx & rcr_tx & txcr_tx_two};
-        can_bus <= cbb[5];
+        can_bus <= cbb[19];
         // can_bus <= txcr_tx & rcr_tx & txcr_tx_two;
     end
 
@@ -123,10 +123,10 @@ module stuffed_transceiver_tb;
 
         tx_msg_exists <= 1;
         tx_msg_id <= 29'h01AABBCC;
-        tx_msg_bytes <= 4'd3;
+        tx_msg_bytes <= 4'd8;
         tx_rtr <= 1'b0;
         tx_extended <= 1'b1;
-        tx_msg <= {40'b0, 24'hFFFFFF};
+        tx_msg <= 64'h0123456789ABCDEF;
 
 
 
